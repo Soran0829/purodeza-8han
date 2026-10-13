@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aichi Safety Radar | パトネット全データ連動マップ</title>
+    <title>Aichi Safety Radar | パトネットあいち情報マップ</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
     
@@ -80,7 +80,7 @@
             <h1>AICHI SAFETY RADAR</h1>
             <p>パトネットあいち 全データ連動システム</p>
         </div>
-        <div class="badge">Excelデータ同期モード</div>
+        <div class="badge" id="updateStatus">データを読み込み中</div>
     </header>
 
     <div class="container">
@@ -91,20 +91,12 @@
                 <h2>タイムライン</h2>
                 <select id="monthFilter" class="filter-select" style="margin-top: 10px;">
                     <option value="all">すべての期間を表示</option>
-                    <option value="2026/06">2026年06月</option>
-                    <option value="2026/05">2026年05月</option>
-                    <option value="2026/04">2026年04月</option>
-                    <option value="2026/03">2026年03月</option>
-                    <option value="2026/02">2026年02月</option>
-                    <option value="2026/01">2026年01月</option>
-                    <option value="2025/12">2025年12月</option>
                 </select>
             </div>
             <div class="info-list" id="infoList"></div>
         </div>
     </div>
 
-    <script src="data.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         const map = L.map('map', { zoomControl: false }).setView([35.1814, 136.9063], 10);
@@ -114,10 +106,32 @@
             attribution: '&copy; <a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>'
         }).addTo(map);
 
-        // Python側から読み込まれたデータをセット（無い場合は空配列）
-        const incidents = typeof crawledData !== 'undefined' ? crawledData : [];
         const infoList = document.getElementById('infoList');
+        const monthFilter = document.getElementById('monthFilter');
+        const updateStatus = document.getElementById('updateStatus');
+        let incidents = [];
         let markersGroup = [];
+
+        async function loadData() {
+            try {
+                const response = await fetch(`data.json?updated=${Date.now()}`, { cache: 'no-store' });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                incidents = await response.json();
+                if (!Array.isArray(incidents)) throw new Error('データ形式が正しくありません');
+
+                const months = [...new Set(incidents.map(item => item.archivePath))];
+                monthFilter.replaceChildren(new Option('すべての期間を表示', 'all'));
+                months.forEach(month => {
+                    const [year, number] = month.split('/');
+                    monthFilter.add(new Option(`${year}年${number}月`, month));
+                });
+                updateStatus.textContent = `最終更新: ${new Date().toLocaleString('ja-JP')}`;
+                render();
+            } catch (error) {
+                updateStatus.textContent = 'データを読み込めません';
+                infoList.textContent = `データを読み込めませんでした: ${error.message}`;
+            }
+        }
 
         function render() {
             markersGroup.forEach(m => map.removeLayer(m));
@@ -128,7 +142,7 @@
             const filtered = incidents.filter(d => selectedMonth === 'all' || d.archivePath === selectedMonth);
 
             if(filtered.length === 0) {
-                infoList.innerHTML = "<p style='padding:20px; color:#a0aec0; text-align:center;'>データがありません。Pythonロボットを実行してdata.jsを生成してください。</p>";
+                infoList.innerHTML = "<p style='padding:20px; color:#a0aec0; text-align:center;'>表示できるデータがありません。</p>";
                 return;
             }
 
@@ -164,8 +178,8 @@
             });
         }
 
-        document.getElementById('monthFilter').addEventListener('change', render);
-        render();
+        monthFilter.addEventListener('change', render);
+        loadData();
     </script>
 </body>
 </html>

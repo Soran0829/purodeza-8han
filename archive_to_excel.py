@@ -1,20 +1,27 @@
 import json
 import re
+import argparse
+import os
 import time
+from datetime import date
+from pathlib import Path
+
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
-# 取得する年月リスト
-years_months = [
-    (2026, "06"),
-    (2026, "05"),
-    (2026, "04"),
-    (2026, "03"),
-    (2026, "02"),
-    (2026, "01"),
-    (2025, "12"),
-]
+parser = argparse.ArgumentParser(description="パトネットあいちの月別記事を取得します")
+parser.add_argument("--months", type=int, default=7, help="取得する直近の月数")
+args = parser.parse_args()
+
+if args.months < 1 or args.months > 120:
+    parser.error("--months は1から120の範囲で指定してください")
+
+today = date.today()
+years_months = []
+for offset in range(args.months):
+    month_index = today.year * 12 + today.month - 1 - offset
+    years_months.append((month_index // 12, f"{month_index % 12 + 1:02d}"))
 
 all_incidents = []
 print("=== パトネットあいち 構造不一致対策版ロボット起動 ===")
@@ -29,7 +36,7 @@ area_coords = {
 }
 
 for year, month in years_months:
-    url = f"http://patnet.jp/{year}/{month}/"
+    url = f"https://patnet.jp/{year}/{month}/"
     print(f"【スキャン中】 {year}年{month}月...")
 
     try:
@@ -37,8 +44,9 @@ for year, month in years_months:
         response = requests.get(url, timeout=10)
         response.encoding = response.apparent_encoding
 
-        if response.status_code != 200:
+        if response.status_code == 404:
             continue
+        response.raise_for_status()
 
         soup = BeautifulSoup(response.text, "html.parser")
 
@@ -105,34 +113,16 @@ for year, month in years_months:
         print(f"アクセスエラー: {e}")
         continue
 
-# 💡【超重要バックアップ機能】もしサイトから1件も読み込めなかった場合の対策
-if len(all_incidents) == 0:
-    print(
-        "\n⚠️ サイトのセキュリティ制限等によりデータが0件だったため、連動確認用の【テストデータ】を自動合成します。"
-    )
-    # 2026/06 ~ 2025/12 までの全月にテスト用のピンデータを強制注入
-    test_idx = 1
-    for year, month in years_months:
-        for area, coord in area_coords.items():
-            all_incidents.append(
-                {
-                    "id": test_idx,
-                    "tag": "声かけ事案" if test_idx % 2 == 0 else "つきまとい",
-                    "archivePath": f"{year}/{month}",
-                    "date": f"{year}年{month}月度の配信情報",
-                    "location": f"愛知県{area}市",
-                    "lat": coord[0] + (test_idx * 0.003),
-                    "lng": coord[1] + (test_idx * 0.002),
-                    "description": f"これはパトネットあいちの /{year}/{month}/ フォルダに対応して自動生成された{area}エリアの防犯データです。地図との連動は正常です。",
-                }
-            )
-            test_idx += 1
+if not all_incidents:
+    raise RuntimeError("取得件数が0件です。既存の公開データは更新しません。")
 
 # データの書き出し
 df = pd.DataFrame(all_incidents)
-df.to_excel("patnet_aichi_archive.xlsx", index=False, engine="openpyxl")
+output_dir = Path(os.environ.get("OUTPUT_DIR", "."))
+output_dir.mkdir(parents=True, exist_ok=True)
+df.to_excel(output_dir / "patnet_aichi_archive.xlsx", index=False, engine="openpyxl")
 
-with open("data.js", "w", encoding="utf-8") as f:
+with (output_dir / "data.js").open("w", encoding="utf-8") as f:
     f.write("const crawledData = " + json.dumps(all_incidents, ensure_ascii=False) + ";")
 
 print(
