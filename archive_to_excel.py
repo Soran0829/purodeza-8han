@@ -9,6 +9,8 @@ from pathlib import Path
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 parser = argparse.ArgumentParser(description="パトネットあいちの月別記事を取得します")
 parser.add_argument("--months", type=int, default=7, help="取得する直近の月数")
@@ -36,6 +38,20 @@ area_coords = {
 }
 
 geocode_cache = {}
+source_session = requests.Session()
+source_session.mount(
+    "http://",
+    HTTPAdapter(
+        max_retries=Retry(
+            total=3,
+            connect=3,
+            read=3,
+            backoff_factor=2,
+            status_forcelist=(429, 500, 502, 503, 504),
+            allowed_methods=("GET",),
+        )
+    ),
+)
 
 
 def find_reported_location(content):
@@ -90,7 +106,7 @@ for year, month in years_months:
 
     try:
         time.sleep(0.5)
-        response = requests.get(url, timeout=10)
+        response = source_session.get(url, timeout=(10, 30))
         response.encoding = response.apparent_encoding
 
         if response.status_code == 404:
