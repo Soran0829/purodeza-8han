@@ -35,7 +35,6 @@ jobs:
       - name: Prepare site
         run: |
           cp 'index (1).html' site/index.html
-          cp patnet_aichi_archive.xlsx site/patnet_aichi_archive.xlsx
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload Pages artifact

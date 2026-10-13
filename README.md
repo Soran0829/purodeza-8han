@@ -43,4 +43,4 @@ python -m pip install requests beautifulsoup4 pandas openpyxl
 python archive_to_excel.py --months 7
 ```
 
-成功すると、同じフォルダーに `data.js` と `patnet_aichi_archive.xlsx` が作られます。公開サイトの更新はGitHub Actions経由で行ってください。
+成功すると、同じフォルダーに `data.js`、`data.json`、`patnet_aichi_archive.xlsx` が作られます。公開サイトの更新はGitHub Actions経由で行ってください。

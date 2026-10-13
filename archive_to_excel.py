@@ -36,7 +36,9 @@ area_coords = {
 }
 
 for year, month in years_months:
-    url = f"https://patnet.jp/{year}/{month}/"
+    # The source host currently presents a TLS certificate for a different
+    # hostname. Use its working HTTP endpoint rather than disabling TLS checks.
+    url = f"http://patnet.jp/{year}/{month}/"
     print(f"【スキャン中】 {year}年{month}月...")
 
     try:
@@ -124,6 +126,9 @@ df.to_excel(output_dir / "patnet_aichi_archive.xlsx", index=False, engine="openp
 
 with (output_dir / "data.js").open("w", encoding="utf-8") as f:
     f.write("const crawledData = " + json.dumps(all_incidents, ensure_ascii=False) + ";")
+
+with (output_dir / "data.json").open("w", encoding="utf-8") as f:
+    json.dump(all_incidents, f, ensure_ascii=False)
 
 print(
     f"\n🎉 処理完了：合計 {len(all_incidents)} 件のデータを 『data.js』 に書き出しました！"
