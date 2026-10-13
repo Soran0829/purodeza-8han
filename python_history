@@ -1,0 +1,5 @@
+python archive_to_excel.py
+Bash
+pip install beautifulsoup4 requests pandas openpyxl
+C:\Users\ohata\Downloads\archive_to_excel.py
+exit()
