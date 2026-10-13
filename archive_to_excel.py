@@ -35,6 +35,53 @@ area_coords = {
     "春日井": (35.2443, 136.9715),
 }
 
+geocode_cache = {}
+
+
+def find_reported_location(content):
+    """Return the location named after 発生場所, when the article has one."""
+    match = re.search(
+        r"発生場所\s*[:：]?\s*(.+?)(?=■|状況|\s{2,}|$)",
+        content,
+    )
+    if not match:
+        return ""
+    return re.sub(r"\s+", "", match.group(1)).strip("。、「」『』")
+
+
+def geocode(location, city_name=None):
+    """Resolve an address with GSI's address search; return lon/lat or None."""
+    if not location:
+        return None
+    cache_key = (city_name, location)
+    if cache_key in geocode_cache:
+        return geocode_cache[cache_key]
+
+    try:
+        response = requests.get(
+            "https://msearch.gsi.go.jp/address-search/AddressSearch",
+            params={
+                "q": f"愛知県{city_name}市{location}"
+                if city_name
+                else f"愛知県{location}"
+            },
+            timeout=10,
+        )
+        response.raise_for_status()
+        results = response.json()
+        if results:
+            lon, lat = results[0]["geometry"]["coordinates"]
+            result = (lat, lon)
+        else:
+            result = None
+    except (requests.RequestException, ValueError, KeyError, TypeError) as error:
+        print(f"住所検索に失敗: {location}: {error}")
+        result = None
+
+    geocode_cache[cache_key] = result
+    time.sleep(0.2)
+    return result
+
 for year, month in years_months:
     # The source host currently presents a TLS certificate for a different
     # hostname. Use its working HTTP endpoint rather than disabling TLS checks.
@@ -71,7 +118,7 @@ for year, month in years_months:
         if not articles:
             articles = soup.find_all("div", id="main")
 
-        for idx, article in enumerate(articles):
+        for article in articles:
             title_el = article.find(["h1", "h2", "h3", "a"])
             title = title_el.text.strip() if title_el else "不審者情報"
             if len(title) > 30:
@@ -81,16 +128,27 @@ for year, month in years_months:
             if len(content) < 20:  # 文字数が少なすぎる空要素はスキップ
                 continue
 
-            # 座標の割り振り
-            lat, lng = 35.1814, 136.9063
-            location = "愛知県内"
-            for area, coord in area_coords.items():
-                if area in content or area in title:
-                    lat, lng = coord[0] + (idx * 0.012), coord[1] + (
-                        idx * 0.008
-                    )  # ピンが重ならないよう分散
-                    location = f"愛知県{area}市付近"
-                    break
+            reported_location = find_reported_location(content)
+            area_name = next(
+                (area for area in area_coords if area in content or area in title),
+                None,
+            )
+            coordinates = geocode(reported_location, area_name)
+
+            # If the article lacks a mappable incident address, use a city
+            # center as an explicitly coarse fallback. Never invent offsets.
+            if coordinates:
+                lat, lng = coordinates
+                location = f"愛知県{reported_location}"
+                location_accuracy = "address"
+            elif area_name:
+                lat, lng = area_coords[area_name]
+                location = f"愛知県{area_name}市付近（市の代表点）"
+                location_accuracy = "city"
+            else:
+                lat, lng = 35.1814, 136.9063
+                location = "愛知県内（場所を特定できず）"
+                location_accuracy = "prefecture"
 
             tag = "声かけ事案"
             if "つきまとい" in content:
@@ -105,9 +163,11 @@ for year, month in years_months:
                     "archivePath": f"{year}/{month}",
                     "date": f"{year}年{month}月 発生事案",
                     "location": location,
+                    "reportedLocation": reported_location,
+                    "locationAccuracy": location_accuracy,
                     "lat": lat,
                     "lng": lng,
-                    "description": content[:140] + "...",
+                    "description": content[:140] + ("..." if len(content) > 140 else ""),
                 }
             )
 
