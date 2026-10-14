@@ -29,9 +29,9 @@ jobs:
       - name: Install dependencies
         run: python -m pip install requests beautifulsoup4 pandas openpyxl
       - name: Fetch source data
-        run: python archive_to_excel.py --months 7
+        run: python scripts/update_data.py --months 7
         env:
-          OUTPUT_DIR: site
+          OUTPUT_DIR: site/data
       - name: Prepare site
         run: |
           cp 'index (1).html' site/index.html

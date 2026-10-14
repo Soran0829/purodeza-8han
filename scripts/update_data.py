@@ -196,16 +196,13 @@ if not all_incidents:
 
 # データの書き出し
 df = pd.DataFrame(all_incidents)
-output_dir = Path(os.environ.get("OUTPUT_DIR", "."))
+output_dir = Path(os.environ.get("OUTPUT_DIR", "data"))
 output_dir.mkdir(parents=True, exist_ok=True)
 df.to_excel(output_dir / "patnet_aichi_archive.xlsx", index=False, engine="openpyxl")
 
-with (output_dir / "data.js").open("w", encoding="utf-8") as f:
-    f.write("const crawledData = " + json.dumps(all_incidents, ensure_ascii=False) + ";")
-
-with (output_dir / "data.json").open("w", encoding="utf-8") as f:
+with (output_dir / "incidents.json").open("w", encoding="utf-8") as f:
     json.dump(all_incidents, f, ensure_ascii=False)
 
 print(
-    f"\n🎉 処理完了：合計 {len(all_incidents)} 件のデータを 『data.js』 に書き出しました！"
+    f"\n🎉 処理完了：合計 {len(all_incidents)} 件のデータを 『{output_dir / 'incidents.json'}』 に保存しました！"
 )

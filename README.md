@@ -22,8 +22,9 @@
 
 ## 更新データ
 
-- 地図は公開時に作られた `data.json` を読み込みます。
-- Excelはサイトの `patnet_aichi_archive.xlsx` からダウンロードできます。
+- 実行コードは `scripts/update_data.py`、生成データは `data/` に分けて保存します。
+- 地図は `data/incidents.json` を読み込みます。
+- Excelは `data/patnet_aichi_archive.xlsx` に保存します。
 - 取得対象は実行日を含む直近7か月です。
 - 記事に「発生場所」があれば住所検索してピンを置きます。住所が特定できない場合は、市の代表点または県内の代表点に表示し、その旨を地図上の場所欄に記載します。
 - 取得件数が0件の場合、ワークフローは失敗して既存の公開サイトを維持します。テスト用データで置き換わることはありません。
@@ -41,7 +42,7 @@ Python 3.10以降を用意し、プロジェクトフォルダーで次を実行
 
 ```powershell
 python -m pip install requests beautifulsoup4 pandas openpyxl
-python archive_to_excel.py --months 7
+python scripts/update_data.py --months 7
 ```
 
-成功すると、同じフォルダーに `data.js`、`data.json`、`patnet_aichi_archive.xlsx` が作られます。公開サイトの更新はGitHub Actions経由で行ってください。
+成功すると、`data/incidents.json` と `data/patnet_aichi_archive.xlsx` が作られます。再実行すると最新の取得結果に置き換わります。GitHub Actionsでは公開サイト用の `site/data/` に同じファイルを生成して公開します。公開サイトの更新はGitHub Actions経由で行ってください。

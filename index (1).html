@@ -114,7 +114,7 @@
 
         async function loadData() {
             try {
-                const response = await fetch(`data.json?updated=${Date.now()}`, { cache: 'no-store' });
+                const response = await fetch(`data/incidents.json?updated=${Date.now()}`, { cache: 'no-store' });
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 incidents = await response.json();
                 if (!Array.isArray(incidents)) throw new Error('データ形式が正しくありません');
