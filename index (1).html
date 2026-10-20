@@ -6,7 +6,25 @@
   <title>Aichi Safety Radar | パトネットあいち不審者情報マップ</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <style>
-    *{box-sizing:border-box}body{margin:0;font-family:system-ui,"Noto Sans JP",sans-serif;color:#172033;background:#f3f6fa}header{height:74px;background:#101a33;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 24px}h1{font-size:20px;margin:0}header p{font-size:12px;color:#bac6dc;margin:4px 0 0}.badge{font-size:12px;border:1px solid #48c5d7;border-radius:20px;padding:7px 12px;color:#7ce5ef}.layout{height:calc(100vh - 74px);display:grid;grid-template-columns:minmax(0,1fr) 390px}#map{height:100%;background:#e4e9f0}.side{height:100%;display:flex;flex-direction:column;background:#fff;border-left:1px solid #e1e6ed}.sidehead{padding:20px;border-bottom:1px solid #e8edf3}.sidehead h2{font-size:17px;margin:0 0 8px}.note{font-size:12px;line-height:1.65;color:#5b6678;margin:0}.items{overflow:auto;padding:12px;flex:1}.item{background:#fff;border:1px solid #e5eaf0;border-radius:10px;padding:14px;margin-bottom:10px;cursor:pointer}.item:hover{border-color:#48aebe}.meta{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:#667085}.tag{color:#bb2947;font-weight:700}.place{font-weight:700;margin:8px 0}.article-title{font-size:13px;font-weight:700;margin:8px 0}.category{font-size:11px;color:#315c82;margin-bottom:6px}.desc{font-size:13px;line-height:1.5;color:#4b5563;max-height:88px;overflow-y:auto;overscroll-behavior:contain;white-space:pre-wrap;padding:8px;background:#f7f9fc;border-radius:6px}.item a{font-size:12px;display:inline-block;margin-top:8px}.empty{padding:20px;color:#667085;text-align:center;font-size:14px}.leaflet-popup-content{line-height:1.6}@media(max-width:800px){.layout{height:calc(100vh - 74px);grid-template-columns:1fr;grid-template-rows:55% 45%}.side{border-left:0;border-top:1px solid #e1e6ed}.sidehead{padding:12px 16px}header{padding:0 14px}h1{font-size:16px}}
+    *{box-sizing:border-box}
+    html,body{width:100%;height:100%;min-height:0;margin:0}
+    body{height:100vh;height:100dvh;display:grid;grid-template-rows:74px minmax(0,1fr);overflow:hidden;font-family:system-ui,"Noto Sans JP",sans-serif;color:#172033;background:#f3f6fa}
+    header{min-width:0;background:#101a33;color:#fff;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 24px}
+    h1{font-size:20px;margin:0}header p{font-size:12px;color:#bac6dc;margin:4px 0 0}.badge{flex:none;font-size:12px;border:1px solid #48c5d7;border-radius:20px;padding:7px 12px;color:#7ce5ef}
+    .layout{min-width:0;min-height:0;overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,390px)}
+    #map{width:100%;height:100%;min-width:0;min-height:0;background:#e4e9f0}
+    .side{min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column;background:#fff;border-left:1px solid #e1e6ed}
+    .sidehead{flex:none;padding:20px;border-bottom:1px solid #e8edf3}.sidehead h2{font-size:17px;margin:0 0 8px}.note{font-size:12px;line-height:1.65;color:#5b6678;margin:0}
+    .items{min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding:12px;flex:1}
+    .item{background:#fff;border:1px solid #e5eaf0;border-radius:10px;padding:14px;margin-bottom:10px;cursor:pointer}.item:hover{border-color:#48aebe}.meta{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:#667085}.tag{color:#bb2947;font-weight:700}.place{font-weight:700;margin:8px 0}.article-title{font-size:13px;font-weight:700;margin:8px 0}.category{font-size:11px;color:#315c82;margin-bottom:6px}.desc{font-size:13px;line-height:1.5;color:#4b5563;max-height:88px;overflow-y:auto;overscroll-behavior:contain;white-space:pre-wrap;padding:8px;background:#f7f9fc;border-radius:6px}.item a{font-size:12px;display:inline-block;margin-top:8px}.empty{padding:20px;color:#667085;text-align:center;font-size:14px}.leaflet-popup-content{line-height:1.6}
+    @media(max-width:800px){
+      body{grid-template-rows:64px minmax(0,1fr)}
+      header{padding:0 14px}h1{font-size:16px}header p{font-size:11px}.badge{font-size:11px;padding:6px 9px}
+      .layout{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(180px,48%) minmax(0,1fr)}
+      .side{border-left:0;border-top:1px solid #e1e6ed}.sidehead{padding:10px 14px}.sidehead h2{font-size:15px;margin-bottom:4px}.note{font-size:11px;line-height:1.45}
+      .items{padding:8px}.item{padding:11px;margin-bottom:8px}
+    }
+    @media(max-width:380px){header{gap:6px;padding:0 10px}h1{font-size:14px}.badge{font-size:10px;padding:5px 7px}.note{font-size:10px}}
   </style>
 </head>
 <body>
@@ -15,6 +33,10 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     const map=L.map('map').setView([35.05,137.05],9);
+    const mapElement=document.getElementById('map');
+    const resizeObserver=new ResizeObserver(()=>map.invalidateSize({pan:false}));
+    resizeObserver.observe(mapElement);
+    window.addEventListener('orientationchange',()=>setTimeout(()=>map.invalidateSize({pan:false}),250));
     L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',{maxZoom:18,attribution:'<a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>'}).addTo(map);
     const items=document.getElementById('items'),status=document.getElementById('status');
     fetch(`data/incidents.json?ts=${Date.now()}`,{cache:'no-store'}).then(r=>{if(!r.ok)throw Error(`HTTP ${r.status}`);return r.json()}).then(rows=>{
