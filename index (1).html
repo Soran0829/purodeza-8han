@@ -38,7 +38,8 @@
         .badge { background: rgba(0, 180, 216, 0.2); border: 1px solid var(--accent-neon); color: var(--accent-neon); padding: 6px 14px; border-radius: 30px; font-size: 0.8rem; font-weight: 600; }
 
         .container { display: flex; flex: 1; height: calc(100vh - 78px); position: relative; }
-        #map { flex: 1; height: 100%; background: #e5e9f0; }
+        #map { flex: 1; height: 100%; min-width: 0; background: #e5e9f0; }
+        #officialMap { width: 100%; height: 100%; border: 0; background: #e5e9f0; }
 
         .sidebar { width: 440px; background: #ffffff; display: flex; flex-direction: column; z-index: 999; border-left: 1px solid rgba(0,0,0,0.05); }
         .sidebar-header { padding: 30px; background: #ffffff; border-bottom: 1px solid #f0f0f0; }
@@ -78,108 +79,28 @@
     <header>
         <div class="logo-area">
             <h1>AICHI SAFETY RADAR</h1>
-            <p>パトネットあいち 全データ連動システム</p>
+            <p>愛知県警察公式 安心・安全マップ</p>
         </div>
-        <div class="badge" id="updateStatus">データを読み込み中</div>
+        <div class="badge">県警公式データを表示</div>
     </header>
 
     <div class="container">
-        <div id="map"></div>
+        <div id="map">
+            <iframe id="officialMap" src="https://map.police.aichi.dsvc.jp/" title="愛知県警察 安心・安全マップ" loading="eager" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+        </div>
 
         <div class="sidebar">
             <div class="sidebar-header">
-                <h2>タイムライン</h2>
-                <select id="monthFilter" class="filter-select" style="margin-top: 10px;">
-                    <option value="all">すべての期間を表示</option>
-                </select>
+                <h2>公式マップを表示中</h2>
+                <p style="font-size:.9rem;line-height:1.7;color:#4a5568">地図内の「パトネットあいち」を選ぶと、県警が現在公開している情報を確認できます。データの掲載・更新は愛知県警察が管理しています。</p>
+                <p style="margin-top:16px"><a href="https://map.police.aichi.dsvc.jp/" target="_blank" rel="noopener noreferrer">公式マップを別タブで開く ↗</a></p>
             </div>
-            <div class="info-list" id="infoList"></div>
+            <div class="info-list">
+                <p style="line-height:1.7;color:#4a5568">このページでは、公式マップの情報を取り込み・複製せず、提供元の画面を埋め込んでいます。地図が表示されない場合は上のリンクから直接ご覧ください。</p>
+                <p style="margin-top:14px"><a href="https://www.pref.aichi.jp/police/anzen/shijo/map/" target="_blank" rel="noopener noreferrer">不審者等情報の説明（愛知県警察）</a></p>
+            </div>
         </div>
     </div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script>
-        const map = L.map('map', { zoomControl: false }).setView([35.1814, 136.9063], 10);
-        L.control.zoom({ position: 'bottomright' }).addTo(map);
-
-        L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>'
-        }).addTo(map);
-
-        const infoList = document.getElementById('infoList');
-        const monthFilter = document.getElementById('monthFilter');
-        const updateStatus = document.getElementById('updateStatus');
-        let incidents = [];
-        let markersGroup = [];
-
-        async function loadData() {
-            try {
-                const response = await fetch(`data/incidents.json?updated=${Date.now()}`, { cache: 'no-store' });
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                incidents = await response.json();
-                if (!Array.isArray(incidents)) throw new Error('データ形式が正しくありません');
-
-                const months = [...new Set(incidents.map(item => item.archivePath))];
-                monthFilter.replaceChildren(new Option('すべての期間を表示', 'all'));
-                months.forEach(month => {
-                    const [year, number] = month.split('/');
-                    monthFilter.add(new Option(`${year}年${number}月`, month));
-                });
-                updateStatus.textContent = `最終更新: ${new Date().toLocaleString('ja-JP')}`;
-                render();
-            } catch (error) {
-                updateStatus.textContent = 'データを読み込めません';
-                infoList.textContent = `データを読み込めませんでした: ${error.message}`;
-            }
-        }
-
-        function render() {
-            markersGroup.forEach(m => map.removeLayer(m));
-            markersGroup = [];
-            infoList.innerHTML = "";
-
-            const selectedMonth = document.getElementById('monthFilter').value;
-            const filtered = incidents.filter(d => selectedMonth === 'all' || d.archivePath === selectedMonth);
-
-            if(filtered.length === 0) {
-                infoList.innerHTML = "<p style='padding:20px; color:#a0aec0; text-align:center;'>表示できるデータがありません。</p>";
-                return;
-            }
-
-            filtered.forEach(data => {
-                const marker = L.marker([data.lat, data.lng]).addTo(map);
-                markersGroup.push(marker);
-                
-                marker.bindPopup(`
-                    <div class="popup-content">
-                        <h3>⚠️ ${data.tag}</h3>
-                        <p><strong>🕒 日時:</strong> ${data.date}</p>
-                        <p><strong>📍 場所:</strong> ${data.location}</p>
-                        <p><strong>📄 詳細:</strong> ${data.description}</p>
-                    </div>
-                `, { className: 'custom-popup', minWidth: 280 });
-
-                const card = document.createElement('div');
-                card.className = 'info-card';
-                card.innerHTML = `
-                    <div class="card-meta">
-                        <span class="card-date">${data.date}</span>
-                        <span class="card-tag">${data.tag}</span>
-                    </div>
-                    <div class="card-location">${data.location}</div>
-                    <div class="card-desc">${data.description}</div>
-                `;
-                
-                card.addEventListener('click', () => {
-                    map.setView([data.lat, data.lng], 13, { animate: true });
-                    marker.openPopup();
-                });
-                infoList.appendChild(card);
-            });
-        }
-
-        monthFilter.addEventListener('change', render);
-        loadData();
-    </script>
 </body>
 </html>

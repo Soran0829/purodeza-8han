@@ -1,6 +1,6 @@
 # Aichi Safety Radar
 
-許諾を確認した安全情報をCSVに蓄積し、地図に表示するプロジェクトです。CSVを長期データの正本として保管し、地図用JSONを生成します。
+愛知県警察の安心・安全マップを埋め込み、県警が現在公開している情報を表示します。許諾を確認した場合は、独立したCSV台帳への蓄積・更新も有効にできます。
 
 ## 利用許諾・位置情報の扱い
 
@@ -15,7 +15,7 @@
 - `data/incidents.csv` が重複を除いて追記するデータ台帳です。
 - `data/incidents.json` は地図表示用にCSVから生成します。
 - `.github/workflows/update-and-deploy.yml` は手動起動・毎日06:17 JST・workflow/script/地図/READMEのmain更新で実行されます。Pages公開自体は許諾変数なしでも行います。
-- Actionsは既存CSV/JSONをGitHub Pagesへデプロイします。`PATNET_REUSE_AUTHORIZED=true` を設定した場合のみ最新1か月分を取得し、CSV/JSONを更新コミットしてからデプロイします。生成データだけのpushは再起動対象外です。
+- Actionsは公式マップを埋め込むページをGitHub Pagesへデプロイします。`PATNET_REUSE_AUTHORIZED=true` を設定した場合のみ最新1か月分を取得し、CSV/JSONを更新コミットしてからデプロイします。生成データだけのpushは再起動対象外です。
 
 ## ローカルで登録する
 
