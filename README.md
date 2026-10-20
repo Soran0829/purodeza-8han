@@ -1,23 +1,23 @@
 # Aichi Safety Radar
 
-愛知県警察の安心・安全マップを埋め込み、県警が現在公開している情報を表示します。許諾を確認した場合は、独立したCSV台帳への蓄積・更新も有効にできます。
+パトネットあいちの不審者情報を取得してCSVへ蓄積し、住所から市区町村単位の座標を求め、HTML地図にピン表示します。
 
 ## 利用許諾・位置情報の扱い
 
-- 公開情報であっても、自動取得・保存・加工・再掲載・地図公開が許可されているとは限りません。情報提供元に取得方法、保存期間、公開範囲、更新頻度、座標データの外部アプリ利用まで確認してください。
-- 許諾が未確認の間は自動取得・公開を実行しません。愛知県警察公式の[不審者等情報](https://www.pref.aichi.jp/police/anzen/shijo/map/)と[アイチポリス／安心・安全マップ](https://www.pref.aichi.jp/police/anzen/seian-s/anzenmap.html)をご利用ください。
-- 表示地点は市または県の代表点です。住所ジオコーディングで発生場所を精密化しません。人物の特徴や個人を特定しうる本文も公開しません。
+- 自動取得はパトネットあいちの公開月別ページから「不審者情報」カテゴリの記事を取得します。
+- 地図座標は発生場所の住所を地理院住所検索で町・市区単位に丸めてから求めます。細かな番地、人物の特徴、記事本文はCSV/地図に複製しません。記事リンクを掲載元として表示します。
+- 公開情報は通報・注意情報で、犯罪が確認されたことや現在の危険を意味しません。位置は概略で、遅延や欠落もありえます。外部アプリで座標を再利用する場合は、データとジオコーディングサービスの利用条件を確認してください。
 - 公開する場合は、非公式情報で位置が概略であること、遅延・欠落の可能性、掲載期間、削除窓口を明記してください。誤認、嫌がらせ、被害者特定につながるリスクを定期的に見直してください。
 - 外部アプリで座標を使う場合、データ提供元の許諾と、座標を生成した地図・ジオコーディングサービスの保存・再利用条件をそれぞれ確認してください。
 
 ## データの更新
 
-- `data/incidents.csv` が重複を除いて追記するデータ台帳です。
-- `data/incidents.json` は地図表示用にCSVから生成します。
-- `.github/workflows/update-and-deploy.yml` は手動起動・毎日06:17 JST・workflow/script/地図/READMEのmain更新で実行されます。Pages公開自体は許諾変数なしでも行います。
-- Actionsは公式マップを埋め込むページをGitHub Pagesへデプロイします。`PATNET_REUSE_AUTHORIZED=true` を設定した場合のみ最新1か月分を取得し、CSV/JSONを更新コミットしてからデプロイします。生成データだけのpushは再起動対象外です。
+- `data/incidents.csv` が記事URL IDで重複を除いて追記する台帳です。
+- `data/incidents.json` は地図表示用で、CSVと同時に更新します。
+- Actionsは手動起動・毎日06:17 JST・workflow/script/地図/READMEのmain更新で実行し、取得データをコミットしてからPagesへデプロイします。
+- Actionsの初回起動は **Actions → Update safety map and deploy → Run workflow**。以後は毎日自動実行されます。
 
-## ローカルで登録する
+## ローカルで更新する
 
 Python 3.10以降と依存ライブラリを用意します。
 
@@ -25,23 +25,10 @@ Python 3.10以降と依存ライブラリを用意します。
 python -m pip install requests beautifulsoup4
 ```
 
-許諾を得た記事テキストをUTF-8で保存し、記事ごとに空行で区切って実行します。
+プロジェクトフォルダーで直近1か月を取得する場合:
 
 ```powershell
-python scripts/update_data.py --input .\authorized_reports.txt --authorized
+python scripts/update_data.py --months 1
 ```
 
-同じ記事はIDで重複を除外します。許諾済みの場合のみ、月別アーカイブの自動取得を明示的に実行できます。
-
-```powershell
-python scripts/update_data.py --fetch --months 1 --authorized
-```
-
-## GitHub Actionsを有効にする
-
-1. **Settings → Actions → General → Workflow permissions** で **Read and write permissions** を有効にします（CSV/JSONをActionsからコミットするため）。
-2. **Settings → Pages** の **Build and deployment → Source** を **GitHub Actions** にします。
-3. **Actions → Update safety map and deploy → Run workflow** から初回実行します。初期状態は空の地図を公開します。
-4. 情報提供元に機械取得・保存・加工・地図公開の許諾を確認した場合のみ、リポジトリ変数 `PATNET_REUSE_AUTHORIZED=true` を設定してください。有効時は新着データを追記し、CSV/JSONを更新コミットしてから公開します。
-
-後続は毎日06:17 JSTに自動実行されます。月別アーカイブに新着がない場合、ファイルのコミットは発生しませんがデプロイは続行します。
+同じ記事はURL IDで重複を除外します。地図表示地点は町・市区町村のおおまかな代表位置です。

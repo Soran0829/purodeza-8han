@@ -1,106 +1,40 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aichi Safety Radar | パトネットあいち情報マップ</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
-    
-    <style>
-        :root {
-            --brand-dark: #0a1128;
-            --brand-primary: #1c2541;
-            --brand-light: #f4f7f6;
-            --accent-neon: #00b4d8;
-            --accent-alert: #ff4d6d;
-            --text-main: #1c2541;
-            --text-muted: #758bfd;
-            --card-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
-        }
-
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', 'Noto Sans JP', sans-serif; }
-        body { background-color: var(--brand-light); color: var(--text-main); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-
-        header {
-            background: linear-gradient(135deg, #0a1128, #1c2541);
-            color: white; padding: 18px 40px; display: flex; justify-content: space-between; align-items: center;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1); z-index: 1000;
-        }
-
-        .logo-area h1 {
-            font-size: 1.5rem; font-weight: 800; letter-spacing: -0.03em;
-            background: linear-gradient(45deg, #fff, var(--accent-neon));
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            display: flex; align-items: center; gap: 12px;
-        }
-        .logo-area p { font-size: 0.75rem; color: #8da9c4; margin-top: 2px; font-weight: 500; }
-        .badge { background: rgba(0, 180, 216, 0.2); border: 1px solid var(--accent-neon); color: var(--accent-neon); padding: 6px 14px; border-radius: 30px; font-size: 0.8rem; font-weight: 600; }
-
-        .container { display: flex; flex: 1; height: calc(100vh - 78px); position: relative; }
-        #map { flex: 1; height: 100%; min-width: 0; background: #e5e9f0; }
-        #officialMap { width: 100%; height: 100%; border: 0; background: #e5e9f0; }
-
-        .sidebar { width: 440px; background: #ffffff; display: flex; flex-direction: column; z-index: 999; border-left: 1px solid rgba(0,0,0,0.05); }
-        .sidebar-header { padding: 30px; background: #ffffff; border-bottom: 1px solid #f0f0f0; }
-        .sidebar-header h2 { font-size: 1.25rem; font-weight: 700; color: var(--brand-dark); margin-bottom: 15px; }
-        
-        .filter-select {
-            width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #ddd;
-            font-size: 0.85rem; font-weight: 500; color: var(--brand-primary); background-color: #fafbfc; outline: none; cursor: pointer;
-        }
-
-        .info-list { overflow-y: auto; flex: 1; padding: 20px; background: #fafbfc; }
-
-        .info-card {
-            background: #ffffff; border-radius: 16px; padding: 24px; margin-bottom: 16px;
-            box-shadow: var(--card-shadow); border: 1px solid transparent; cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); position: relative; overflow: hidden;
-        }
-        .info-card::before { content: ''; position: absolute; top: 0; left: 0; width: 6px; height: 100%; background: var(--accent-alert); }
-        .info-card:hover { transform: translateY(-4px); border-color: rgba(0, 180, 216, 0.3); box-shadow: 0 15px 35px rgba(0, 0, 0, 0.12); }
-
-        .card-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-        .card-date { font-size: 0.75rem; color: #a0aec0; font-weight: 600; }
-        .card-tag { font-size: 0.7rem; background: #fff5f5; color: var(--accent-alert); padding: 2px 8px; border-radius: 4px; font-weight: 700; }
-        .card-location { font-size: 1.05rem; font-weight: 700; color: var(--brand-dark); margin-bottom: 10px; line-height: 1.4; }
-        .card-desc { font-size: 0.85rem; line-height: 1.6; color: #4a5568; }
-
-        .custom-popup .leaflet-popup-content-wrapper { border-radius: 20px; padding: 15px; box-shadow: 0 20px 40px rgba(0,0,0,0.15); background: var(--brand-dark); color: white; }
-        .custom-popup .leaflet-popup-tip { background: var(--brand-dark); }
-        .popup-content h3 { font-size: 1.1rem; color: #ff758f; margin-bottom: 10px; font-weight: 700; }
-        .popup-content p { font-size: 0.85rem; margin-bottom: 6px; color: #e2e8f0; line-height: 1.6; }
-
-        @media (max-width: 900px) { .container { flex-direction: column-reverse; } .sidebar { width: 100%; height: 45%; } }
-    </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aichi Safety Radar | パトネットあいち不審者情報マップ</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    *{box-sizing:border-box}body{margin:0;font-family:system-ui,"Noto Sans JP",sans-serif;color:#172033;background:#f3f6fa}header{height:74px;background:#101a33;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 24px}h1{font-size:20px;margin:0}header p{font-size:12px;color:#bac6dc;margin:4px 0 0}.badge{font-size:12px;border:1px solid #48c5d7;border-radius:20px;padding:7px 12px;color:#7ce5ef}.layout{height:calc(100vh - 74px);display:grid;grid-template-columns:minmax(0,1fr) 390px}#map{height:100%;background:#e4e9f0}.side{height:100%;display:flex;flex-direction:column;background:#fff;border-left:1px solid #e1e6ed}.sidehead{padding:20px;border-bottom:1px solid #e8edf3}.sidehead h2{font-size:17px;margin:0 0 8px}.note{font-size:12px;line-height:1.65;color:#5b6678;margin:0}.items{overflow:auto;padding:12px;flex:1}.item{background:#fff;border:1px solid #e5eaf0;border-radius:10px;padding:14px;margin-bottom:10px;cursor:pointer}.item:hover{border-color:#48aebe}.meta{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:#667085}.tag{color:#bb2947;font-weight:700}.place{font-weight:700;margin:8px 0}.desc{font-size:13px;line-height:1.5;color:#4b5563}.item a{font-size:12px;display:inline-block;margin-top:8px}.empty{padding:20px;color:#667085;text-align:center;font-size:14px}.leaflet-popup-content{line-height:1.6}@media(max-width:800px){.layout{height:calc(100vh - 74px);grid-template-columns:1fr;grid-template-rows:55% 45%}.side{border-left:0;border-top:1px solid #e1e6ed}.sidehead{padding:12px 16px}header{padding:0 14px}h1{font-size:16px}}
+  </style>
 </head>
 <body>
-
-    <header>
-        <div class="logo-area">
-            <h1>AICHI SAFETY RADAR</h1>
-            <p>愛知県警察公式 安心・安全マップ</p>
-        </div>
-        <div class="badge">県警公式データを表示</div>
-    </header>
-
-    <div class="container">
-        <div id="map">
-            <iframe id="officialMap" src="https://map.police.aichi.dsvc.jp/" title="愛知県警察 安心・安全マップ" loading="eager" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
-        </div>
-
-        <div class="sidebar">
-            <div class="sidebar-header">
-                <h2>公式マップを表示中</h2>
-                <p style="font-size:.9rem;line-height:1.7;color:#4a5568">地図内の「パトネットあいち」を選ぶと、県警が現在公開している情報を確認できます。データの掲載・更新は愛知県警察が管理しています。</p>
-                <p style="margin-top:16px"><a href="https://map.police.aichi.dsvc.jp/" target="_blank" rel="noopener noreferrer">公式マップを別タブで開く ↗</a></p>
-            </div>
-            <div class="info-list">
-                <p style="line-height:1.7;color:#4a5568">このページでは、公式マップの情報を取り込み・複製せず、提供元の画面を埋め込んでいます。地図が表示されない場合は上のリンクから直接ご覧ください。</p>
-                <p style="margin-top:14px"><a href="https://www.pref.aichi.jp/police/anzen/shijo/map/" target="_blank" rel="noopener noreferrer">不審者等情報の説明（愛知県警察）</a></p>
-            </div>
-        </div>
-    </div>
-
+  <header><div><h1>AICHI SAFETY RADAR</h1><p>パトネットあいち 不審者情報マップ</p></div><div id="status" class="badge">データ読込中</div></header>
+  <main class="layout"><div id="map" aria-label="不審者情報の地図"></div><section class="side"><div class="sidehead"><h2>最近の不審者情報</h2><p class="note">ピンは住所を町・市区単位に丸めた代表位置です。公開情報であり、現在の危険や犯罪発生を示すものではありません。詳細は掲載元をご確認ください。</p></div><div id="items" class="items"></div></section></main>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map=L.map('map').setView([35.05,137.05],9);
+    L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',{maxZoom:18,attribution:'<a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>'}).addTo(map);
+    const items=document.getElementById('items'),status=document.getElementById('status');
+    fetch(`data/incidents.json?ts=${Date.now()}`,{cache:'no-store'}).then(r=>{if(!r.ok)throw Error(`HTTP ${r.status}`);return r.json()}).then(rows=>{
+      if(!Array.isArray(rows))throw Error('JSON形式が正しくありません');
+      status.textContent=`掲載 ${rows.length} 件`;
+      if(!rows.length){items.innerHTML='<p class="empty">現在表示できるデータがありません。</p>';return;}
+      const bounds=[];
+      rows.slice().reverse().forEach(row=>{
+        const lat=Number(row.lat),lng=Number(row.lng);if(!Number.isFinite(lat)||!Number.isFinite(lng))return;
+        const point=[lat,lng];bounds.push(point);
+        const popup=document.createElement('div');
+        const strong=document.createElement('strong');strong.textContent=row.tag||'不審者情報';popup.append(strong,document.createElement('br'),document.createTextNode(`${row.date||''} ${row.location||''}`));
+        const marker=L.marker(point).addTo(map).bindPopup(popup);const card=document.createElement('article');card.className='item';
+        const meta=document.createElement('div');meta.className='meta';const date=document.createElement('span');date.textContent=row.date||'';const tag=document.createElement('span');tag.className='tag';tag.textContent=row.tag||'不審者情報';meta.append(date,tag);
+        const place=document.createElement('div');place.className='place';place.textContent=row.location||'愛知県内';const desc=document.createElement('div');desc.className='desc';desc.textContent=row.description||'';
+        card.append(meta,place,desc);const link=document.createElement('a');link.href=row.sourceUrl||'https://patnet.jp/';link.target='_blank';link.rel='noopener noreferrer';link.textContent='掲載元の記事を開く ↗';card.append(link);
+        card.addEventListener('click',e=>{if(e.target!==link){map.setView(point,12);marker.openPopup();}});items.append(card);
+      });
+      if(bounds.length)map.fitBounds(bounds,{padding:[28,28],maxZoom:11});
+    }).catch(error=>{status.textContent='データを読み込めません';items.textContent=`データを読み込めませんでした: ${error.message}`;});
+  </script>
 </body>
 </html>

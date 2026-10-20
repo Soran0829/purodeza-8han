@@ -1,72 +1,152 @@
-"""Fetch, normalize, and append Aichi safety reports.
-
-Automated collection and republication require source-owner authorization. Keep
-network fetching disabled unless the operator has obtained that authorization.
-"""
+"""Import Patnet Aichi suspicious-person notices into a CSV map ledger."""
 
 import argparse
 import csv
 import hashlib
 import json
-import os
 import re
 import time
 from datetime import date, datetime, timezone
 from pathlib import Path
+from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
 
-FIELDS = [
-    "id", "date", "tag", "location", "reportedLocation", "locationAccuracy",
-    "lat", "lng", "description", "sourceUrl", "lastChecked",
-]
-AREA_COORDS = {
-    "名古屋": (35.1814, 136.9063), "豊田": (35.0874, 137.1564),
-    "一宮": (35.3025, 136.8041), "岡崎": (34.9532, 137.1685),
-    "豊橋": (34.7629, 137.3875), "春日井": (35.2443, 136.9715),
-}
+BASE_URL = "http://patnet.jp/"
+GEOCODER_URL = "https://msearch.gsi.go.jp/address-search/AddressSearch"
+FIELDS = ["id", "date", "tag", "location", "reportedLocation", "locationAccuracy",
+          "lat", "lng", "description", "sourceUrl", "lastChecked"]
+HEADERS = {"User-Agent": "AichiSafetyRadar/1.0 (public safety map; contact via repository)"}
+TIMEOUT = (10, 30)
+GEOCODE_CACHE = {}
 
 
-def parse_report(content, title=""):
-    """Extract only coarse, non-identifying fields from a source report."""
-    text = re.sub(r"\s+", " ", content).strip()
-    place = re.search(r"発生場所\s*[:：]?\s*(.+?)(?=■|状況|内容|$)", text)
-    location = re.sub(r"\s+", "", place.group(1)).strip("。、「」『』") if place else ""
-    area = next((name for name in AREA_COORDS if name in text or name in title), None)
-    # Avoid producing address-level public coordinates. The point denotes a broad area only.
-    if area:
-        lat, lng = AREA_COORDS[area]
-        place_label = f"愛知県{area}市付近（市の代表点）"
-        accuracy = "city"
-    else:
-        lat, lng = 35.1814, 136.9063
-        place_label = "愛知県内（場所を特定できず）"
-        accuracy = "prefecture"
-    tag = "つきまとい" if "つきまとい" in text else (
-        "のぞき・盗撮" if "盗撮" in text or "ちかん" in text else "声かけ事案"
-    )
-    # Omit descriptions that could identify a victim or suspect.
-    summary = f"{tag}に関する情報。詳細は出典を確認してください。"
-    return {"tag": tag, "location": place_label, "reportedLocation": location,
-            "locationAccuracy": accuracy, "lat": lat, "lng": lng, "description": summary}
+def month_start(months_back=0):
+    current = date.today()
+    index = current.year * 12 + current.month - 1 - months_back
+    return date(index // 12, index % 12 + 1, 1)
 
 
-def geocode(location, city_name=None, session=None):
-    """Optional GSI address lookup for authorized internal workflows only."""
-    if not location:
+def fetch_soup(url, session):
+    response = session.get(url, timeout=TIMEOUT, headers=HEADERS)
+    response.raise_for_status()
+    # Parsing response bytes lets BeautifulSoup honor the document's own charset.
+    return BeautifulSoup(response.content, "html.parser")
+
+
+def category_text(post):
+    utility = post.select_one(".entry-utility")
+    return utility.get_text(" ", strip=True) if utility else ""
+
+
+def post_permalink(post, base_url):
+    heading = post.select_one(".entry-title a[href]")
+    if not heading:
+        heading = post.select_one("h2 a[href], h3 a[href]")
+    return urljoin(base_url, heading["href"]) if heading else ""
+
+
+def archive_posts(month_url, session, cutoff):
+    """Walk WordPress monthly archive pages until they pass the requested cutoff."""
+    url = month_url
+    found = []
+    visited = set()
+    while url and url not in visited:
+        visited.add(url)
+        soup = fetch_soup(url, session)
+        posts = soup.select("#main .post")
+        if not posts:
+            break
+        page_dates = []
+        for post in posts:
+            published = post.select_one(".entry-date")
+            date_text = published.get_text(" ", strip=True) if published else post.get_text(" ", strip=True)
+            match = re.search(r"(\d{4})年\s*(\d{1,2})月\s*(\d{1,2})日", date_text)
+            posted_on = date(int(match.group(1)), int(match.group(2)), int(match.group(3))) if match else None
+            if posted_on:
+                page_dates.append(posted_on)
+            if posted_on and posted_on < cutoff:
+                continue
+            if "不審者情報" not in category_text(post):
+                continue
+            permalink = post_permalink(post, url)
+            if permalink:
+                found.append((permalink, posted_on))
+        if page_dates and max(page_dates) < cutoff:
+            break
+        older = soup.select_one(".navigation a[rel='next'], a.next.page-numbers, .nav-previous a")
+        url = urljoin(url, older["href"]) if older and older.get("href") else ""
+        time.sleep(0.2)
+    return found
+
+
+def extract_article(permalink, posted_on, session):
+    soup = fetch_soup(permalink, session)
+    post = soup.select_one("#main .post") or soup
+    heading = post.select_one(".entry-title") or soup.title
+    title = heading.get_text(" ", strip=True) if heading else "不審者情報"
+    body = post.select_one(".entry-content")
+    content = body.get_text("\n", strip=True) if body else post.get_text("\n", strip=True)
+    category = category_text(post)
+    if "不審者情報" not in category:
         return None
-    response = (session or requests).get(
-        "https://msearch.gsi.go.jp/address-search/AddressSearch",
-        params={"q": f"愛知県{city_name}市{location}" if city_name else f"愛知県{location}"},
-        timeout=10,
-    )
+
+    place_match = re.search(r"■\s*発生場所\s*[:：]?\s*(.+?)(?=\s*■|$)", content, re.S)
+    raw_place = re.sub(r"\s+", "", place_match.group(1)).strip("。、「」『』") if place_match else ""
+    municipality = normalize_municipality(raw_place or title)
+    if not municipality:
+        return None
+    event_match = re.search(r"■\s*発生日時\s*[:：]?\s*(.+?)(?=\s*■|$)", content, re.S)
+    event_date = event_match.group(1).strip() if event_match else (posted_on.isoformat() if posted_on else "")
+    # Public summary deliberately excludes identifying descriptions from the report.
+    if "つきまとい" in content:
+        tag = "つきまとい"
+    elif "盗撮" in content or "ちかん" in content:
+        tag = "のぞき・盗撮"
+    else:
+        tag = "声かけ・不審者情報"
+    title_safe = re.sub(r"[☆★■◆◇●◎【】\[\]]", "", title).strip()
+    description = f"{tag}に関する情報です。詳細は掲載元の記事をご確認ください。"
+    latlng = geocode_area(municipality, session)
+    if latlng:
+        lat, lng = latlng
+        accuracy = "municipality"
+        label = f"{municipality}付近（地域代表点）"
+    else:
+        # Fallback is still coarse and does not pretend to be an incident address.
+        lat, lng, accuracy, label = 35.1802, 136.9066, "prefecture", "愛知県内（地域未特定）"
+    return {"id": hashlib.sha256(permalink.encode("utf-8")).hexdigest()[:20],
+            "date": event_date, "tag": tag, "location": label,
+            "reportedLocation": municipality, "locationAccuracy": accuracy,
+            "lat": lat, "lng": lng, "description": description,
+            "sourceUrl": permalink,
+            "lastChecked": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+
+
+def normalize_municipality(text):
+    text = text.replace("愛知県", "")
+    # Keep Nagoya's ward for a useful but non-address-level map point.
+    match = re.search(r"名古屋市\s*[一-龯ぁ-んァ-ヶ]+区", text)
+    if match:
+        return re.sub(r"\s+", "", match.group(0))
+    match = re.search(r"(?:[一-龯ぁ-んァ-ヶ]+郡\s*)?[一-龯ぁ-んァ-ヶ]+(?:市|町|村)", text)
+    return re.sub(r"\s+", "", match.group(0)) if match else ""
+
+
+def geocode_area(municipality, session):
+    if municipality in GEOCODE_CACHE:
+        return GEOCODE_CACHE[municipality]
+    response = session.get(GEOCODER_URL, params={"q": f"愛知県{municipality}"}, timeout=TIMEOUT, headers=HEADERS)
     response.raise_for_status()
     results = response.json()
     if not results:
+        GEOCODE_CACHE[municipality] = None
         return None
     lng, lat = results[0]["geometry"]["coordinates"]
-    return lat, lng
+    GEOCODE_CACHE[municipality] = (float(lat), float(lng))
+    time.sleep(0.2)
+    return GEOCODE_CACHE[municipality]
 
 
 def load_csv(path):
@@ -76,95 +156,56 @@ def load_csv(path):
         return list(csv.DictReader(file))
 
 
-def save_csv(path, rows):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8-sig", newline="") as file:
+def save_outputs(csv_path, json_path, rows):
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    with csv_path.open("w", encoding="utf-8-sig", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=FIELDS, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
-
-
-def stable_id(source_url, content):
-    return hashlib.sha256(f"{source_url}\n{content}".encode("utf-8")).hexdigest()[:20]
-
-
-def fetch_reports(months):
-    """Collect monthly archive entries. Call only with permission enabled."""
-    today = date.today()
-    reports = []
-    for offset in range(months):
-        month_index = today.year * 12 + today.month - 1 - offset
-        year, month = month_index // 12, month_index % 12 + 1
-        url = f"http://patnet.jp/{year}/{month:02d}/"
-        response = requests.get(url, timeout=(10, 30))
-        response.raise_for_status()
-        response.encoding = response.apparent_encoding
-        soup = BeautifulSoup(response.text, "html.parser")
-        articles = soup.find_all("article") or soup.find_all("div", id="main")
-        for article in articles:
-            content = article.get_text(" ", strip=True)
-            if len(content) < 20:
-                continue
-            heading = article.find(["h1", "h2", "h3", "a"])
-            title = heading.get_text(" ", strip=True) if heading else ""
-            reports.append((url, content, title, f"{year}年{month:02d}月"))
-        time.sleep(0.5)
-    return reports
-
-
-def parse_text_input(input_path):
-    """Read authorized reports from a UTF-8 text file, separated by blank lines."""
-    reports = []
-    if not input_path:
-        return reports
-    for block in re.split(r"\n\s*\n", input_path.read_text(encoding="utf-8-sig")):
-        block = block.strip()
-        if block:
-            reports.append(("", block, "", "発生時期未確認"))
-    return reports
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+    json_path.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="パトネットあいち情報をCSVに蓄積し、地図データを出力")
-    parser.add_argument("--input", type=Path, help="権限を得た情報を手動保存したUTF-8テキスト（1記事ずつ空行区切り）")
-    parser.add_argument("--fetch", action="store_true", help="許諾済みの月別アーカイブを取得")
-    parser.add_argument("--months", type=int, default=1)
-    parser.add_argument("--authorized", action="store_true", help="取得・保存・再掲載の許諾を得ていることを確認")
-    parser.add_argument("--csv", type=Path, default=Path(os.environ.get("OUTPUT_DIR", "data")) / "incidents.csv")
-    parser.add_argument("--json", type=Path, default=Path(os.environ.get("OUTPUT_DIR", "data")) / "incidents.json")
+    parser = argparse.ArgumentParser(description="パトネットあいちの不審者情報をCSVに蓄積し地図データに変換")
+    parser.add_argument("--months", type=int, default=1, help="取得する直近月数（1〜12）")
+    parser.add_argument("--csv", type=Path, default=Path("data/incidents.csv"))
+    parser.add_argument("--json", type=Path, default=Path("data/incidents.json"))
     args = parser.parse_args()
-    if args.input and not args.authorized:
-        parser.error("手動入力データの保存・再掲載にも許諾が必要です。確認後に --authorized を指定してください")
-    if args.fetch and not args.authorized:
-        parser.error("自動取得には情報提供元から取得・保存・再掲載の許諾を得たうえで --authorized を指定してください")
-    if not args.fetch and not args.input:
-        parser.error("--input または（許諾済みの場合のみ）--fetch を指定してください")
-    if not 1 <= args.months <= 120:
-        parser.error("--months は1から120の範囲で指定してください")
+    if not 1 <= args.months <= 12:
+        parser.error("--months は1から12の範囲で指定してください")
 
-    reports = fetch_reports(args.months) if args.fetch else []
-    reports.extend(parse_text_input(args.input))
+    session = requests.Session()
+    cutoff = month_start(args.months - 1)
+    reports = []
+    for back in reversed(range(args.months)):
+        first = month_start(back)
+        month_url = f"{BASE_URL}{first.year}/{first.month:02d}/"
+        reports.extend(archive_posts(month_url, session, cutoff))
+    # Deduplicate links before requesting article pages.
+    reports = list({url: posted for url, posted in reports}.items())
+    print(f"記事リンク候補: {len(reports)}件")
 
-    existing = load_csv(args.csv)
-    known = {row.get("id", "") for row in existing}
-    checked = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    rows = load_csv(args.csv)
+    by_id = {row.get("id"): row for row in rows}
+    existing_ids = set(by_id)
     added = 0
-    for source_url, content, title, report_date in reports:
-        identifier = stable_id(source_url, content)
-        if identifier in known:
+    for permalink, posted_on in reports:
+        identifier = hashlib.sha256(permalink.encode("utf-8")).hexdigest()[:20]
+        if identifier in existing_ids:
             continue
-        parsed = parse_report(content, title)
-        existing.append({"id": identifier, "date": report_date, **parsed,
-                         "sourceUrl": source_url, "lastChecked": checked})
-        known.add(identifier)
-        added += 1
-    save_csv(args.csv, existing)
-    args.json.parent.mkdir(parents=True, exist_ok=True)
-    # JSON remains the map's runtime format; CSV is the durable append-only ledger.
-    with args.json.open("w", encoding="utf-8") as file:
-        json.dump(existing, file, ensure_ascii=False, indent=2)
-    print(f"CSV: {args.csv}（新規 {added} 件 / 累計 {len(existing)} 件）")
-    print(f"地図データ: {args.json}")
+        try:
+            record = extract_article(permalink, posted_on, session)
+            if record:
+                rows.append(record)
+                existing_ids.add(record["id"])
+                added += 1
+            time.sleep(0.25)
+        except (requests.RequestException, ValueError, KeyError, TypeError) as error:
+            print(f"取得・ジオコード失敗: {permalink}: {error}")
+    save_outputs(args.csv, args.json, rows)
+    print(f"CSV新規追加: {added}件 / 累計: {len(rows)}件")
+    print(f"出力: {args.csv} / {args.json}")
 
 
 if __name__ == "__main__":
