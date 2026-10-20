@@ -6,12 +6,12 @@
   <title>Aichi Safety Radar | パトネットあいち不審者情報マップ</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <style>
-    *{box-sizing:border-box}body{margin:0;font-family:system-ui,"Noto Sans JP",sans-serif;color:#172033;background:#f3f6fa}header{height:74px;background:#101a33;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 24px}h1{font-size:20px;margin:0}header p{font-size:12px;color:#bac6dc;margin:4px 0 0}.badge{font-size:12px;border:1px solid #48c5d7;border-radius:20px;padding:7px 12px;color:#7ce5ef}.layout{height:calc(100vh - 74px);display:grid;grid-template-columns:minmax(0,1fr) 390px}#map{height:100%;background:#e4e9f0}.side{height:100%;display:flex;flex-direction:column;background:#fff;border-left:1px solid #e1e6ed}.sidehead{padding:20px;border-bottom:1px solid #e8edf3}.sidehead h2{font-size:17px;margin:0 0 8px}.note{font-size:12px;line-height:1.65;color:#5b6678;margin:0}.items{overflow:auto;padding:12px;flex:1}.item{background:#fff;border:1px solid #e5eaf0;border-radius:10px;padding:14px;margin-bottom:10px;cursor:pointer}.item:hover{border-color:#48aebe}.meta{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:#667085}.tag{color:#bb2947;font-weight:700}.place{font-weight:700;margin:8px 0}.desc{font-size:13px;line-height:1.5;color:#4b5563}.item a{font-size:12px;display:inline-block;margin-top:8px}.empty{padding:20px;color:#667085;text-align:center;font-size:14px}.leaflet-popup-content{line-height:1.6}@media(max-width:800px){.layout{height:calc(100vh - 74px);grid-template-columns:1fr;grid-template-rows:55% 45%}.side{border-left:0;border-top:1px solid #e1e6ed}.sidehead{padding:12px 16px}header{padding:0 14px}h1{font-size:16px}}
+    *{box-sizing:border-box}body{margin:0;font-family:system-ui,"Noto Sans JP",sans-serif;color:#172033;background:#f3f6fa}header{height:74px;background:#101a33;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 24px}h1{font-size:20px;margin:0}header p{font-size:12px;color:#bac6dc;margin:4px 0 0}.badge{font-size:12px;border:1px solid #48c5d7;border-radius:20px;padding:7px 12px;color:#7ce5ef}.layout{height:calc(100vh - 74px);display:grid;grid-template-columns:minmax(0,1fr) 390px}#map{height:100%;background:#e4e9f0}.side{height:100%;display:flex;flex-direction:column;background:#fff;border-left:1px solid #e1e6ed}.sidehead{padding:20px;border-bottom:1px solid #e8edf3}.sidehead h2{font-size:17px;margin:0 0 8px}.note{font-size:12px;line-height:1.65;color:#5b6678;margin:0}.items{overflow:auto;padding:12px;flex:1}.item{background:#fff;border:1px solid #e5eaf0;border-radius:10px;padding:14px;margin-bottom:10px;cursor:pointer}.item:hover{border-color:#48aebe}.meta{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:#667085}.tag{color:#bb2947;font-weight:700}.place{font-weight:700;margin:8px 0}.article-title{font-size:13px;font-weight:700;margin:8px 0}.category{font-size:11px;color:#315c82;margin-bottom:6px}.desc{font-size:13px;line-height:1.5;color:#4b5563;max-height:88px;overflow-y:auto;overscroll-behavior:contain;white-space:pre-wrap;padding:8px;background:#f7f9fc;border-radius:6px}.item a{font-size:12px;display:inline-block;margin-top:8px}.empty{padding:20px;color:#667085;text-align:center;font-size:14px}.leaflet-popup-content{line-height:1.6}@media(max-width:800px){.layout{height:calc(100vh - 74px);grid-template-columns:1fr;grid-template-rows:55% 45%}.side{border-left:0;border-top:1px solid #e1e6ed}.sidehead{padding:12px 16px}header{padding:0 14px}h1{font-size:16px}}
   </style>
 </head>
 <body>
   <header><div><h1>AICHI SAFETY RADAR</h1><p>パトネットあいち 不審者情報マップ</p></div><div id="status" class="badge">データ読込中</div></header>
-  <main class="layout"><div id="map" aria-label="不審者情報の地図"></div><section class="side"><div class="sidehead"><h2>最近の不審者情報</h2><p class="note">ピンは住所を町・市区単位に丸めた代表位置です。公開情報であり、現在の危険や犯罪発生を示すものではありません。詳細は掲載元をご確認ください。</p></div><div id="items" class="items"></div></section></main>
+  <main class="layout"><div id="map" aria-label="不審者情報の地図"></div><section class="side"><div class="sidehead"><h2>過去1年の不審者情報</h2><p class="note">ピンは住所を町・市区単位に丸めた代表位置です。公開情報であり、現在の危険や犯罪発生を示すものではありません。記事本文は「状況」を表示し、人物の外見等は省いています。</p></div><div id="items" class="items"></div></section></main>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     const map=L.map('map').setView([35.05,137.05],9);
@@ -22,15 +22,18 @@
       status.textContent=`掲載 ${rows.length} 件`;
       if(!rows.length){items.innerHTML='<p class="empty">現在表示できるデータがありません。</p>';return;}
       const bounds=[];
-      rows.slice().reverse().forEach(row=>{
+      rows.slice().sort((a,b)=>{
+        const stamp=value=>{const match=(value||'').match(/\/(\d{4})\/(\d{2})\/(\d{2})\//);return match?`${match[1]}${match[2]}${match[3]}`:'00000000';};
+        return stamp(b.sourceUrl).localeCompare(stamp(a.sourceUrl));
+      }).forEach(row=>{
         const lat=Number(row.lat),lng=Number(row.lng);if(!Number.isFinite(lat)||!Number.isFinite(lng))return;
         const point=[lat,lng];bounds.push(point);
         const popup=document.createElement('div');
         const strong=document.createElement('strong');strong.textContent=row.tag||'不審者情報';popup.append(strong,document.createElement('br'),document.createTextNode(`${row.date||''} ${row.location||''}`));
         const marker=L.marker(point).addTo(map).bindPopup(popup);const card=document.createElement('article');card.className='item';
         const meta=document.createElement('div');meta.className='meta';const date=document.createElement('span');date.textContent=row.date||'';const tag=document.createElement('span');tag.className='tag';tag.textContent=row.tag||'不審者情報';meta.append(date,tag);
-        const place=document.createElement('div');place.className='place';place.textContent=row.location||'愛知県内';const desc=document.createElement('div');desc.className='desc';desc.textContent=row.description||'';
-        card.append(meta,place,desc);const link=document.createElement('a');link.href=row.sourceUrl||'https://patnet.jp/';link.target='_blank';link.rel='noopener noreferrer';link.textContent='掲載元の記事を開く ↗';card.append(link);
+        const place=document.createElement('div');place.className='place';place.textContent=row.location||'愛知県内';const title=document.createElement('div');title.className='article-title';title.textContent=row.title||'';const category=document.createElement('div');category.className='category';category.textContent=`カテゴリ: ${row.category||'不審者情報'}`;const desc=document.createElement('div');desc.className='desc';desc.textContent=row.body||row.description||'';
+        card.append(meta,place,title,category,desc);const link=document.createElement('a');link.href=row.sourceUrl||'https://patnet.jp/';link.target='_blank';link.rel='noopener noreferrer';link.textContent='掲載元の記事を開く ↗';card.append(link);
         card.addEventListener('click',e=>{if(e.target!==link){map.setView(point,12);marker.openPopup();}});items.append(card);
       });
       if(bounds.length)map.fitBounds(bounds,{padding:[28,28],maxZoom:11});

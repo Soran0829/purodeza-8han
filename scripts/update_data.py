@@ -15,11 +15,14 @@ from bs4 import BeautifulSoup
 
 BASE_URL = "http://patnet.jp/"
 GEOCODER_URL = "https://msearch.gsi.go.jp/address-search/AddressSearch"
-FIELDS = ["id", "date", "tag", "location", "reportedLocation", "locationAccuracy",
-          "lat", "lng", "description", "sourceUrl", "lastChecked"]
+FIELDS = ["id", "date", "tag", "category", "title", "location", "reportedLocation",
+          "locationAccuracy", "lat", "lng", "description", "body", "sourceUrl", "lastChecked"]
 HEADERS = {"User-Agent": "AichiSafetyRadar/1.0 (public safety map; contact via repository)"}
 TIMEOUT = (10, 30)
 GEOCODE_CACHE = {}
+APPEARANCE_TERMS = ("着用", "身に着け", "眼鏡", "メガネ", "めがね", "サングラス", "目出し帽",
+                    "帽子", "ヘルメット", "マスク", "髪型", "体格", "身長", "服装", "上着",
+                    "長ズボン", "短パン", "ワンボックス", "車両", "ナンバー")
 
 
 def month_start(months_back=0):
@@ -88,8 +91,10 @@ def extract_article(permalink, posted_on, session):
     title = heading.get_text(" ", strip=True) if heading else "不審者情報"
     body = post.select_one(".entry-content")
     content = body.get_text("\n", strip=True) if body else post.get_text("\n", strip=True)
-    category = category_text(post)
-    if "不審者情報" not in category:
+    utility = category_text(post)
+    category_match = re.search(r"カテゴリー\s*[:：]\s*(.+?)(?=\s*(?:タグ\s*[:：]|パーマリンク|$))", utility)
+    categories = category_match.group(1).strip(" |｜") if category_match else "不審者情報"
+    if "不審者情報" not in categories:
         return None
 
     place_match = re.search(r"■\s*発生場所\s*[:：]?\s*(.+?)(?=\s*■|$)", content, re.S)
@@ -107,7 +112,10 @@ def extract_article(permalink, posted_on, session):
     else:
         tag = "声かけ・不審者情報"
     title_safe = re.sub(r"[☆★■◆◇●◎【】\[\]]", "", title).strip()
-    description = f"{tag}に関する情報です。詳細は掲載元の記事をご確認ください。"
+    situation_match = re.search(r"■\s*状況\s*[:：]?\s*(.+?)(?=\s*■\s*(?:不審者等?|対策|情報配信|備考)|$)", content, re.S)
+    body_text = situation_match.group(1) if situation_match else title_safe
+    body_text = sanitize_public_body(body_text)
+    description = f"{tag}に関する情報です。"
     latlng = geocode_area(municipality, session)
     if latlng:
         lat, lng = latlng
@@ -117,9 +125,10 @@ def extract_article(permalink, posted_on, session):
         # Fallback is still coarse and does not pretend to be an incident address.
         lat, lng, accuracy, label = 35.1802, 136.9066, "prefecture", "愛知県内（地域未特定）"
     return {"id": hashlib.sha256(permalink.encode("utf-8")).hexdigest()[:20],
-            "date": event_date, "tag": tag, "location": label,
+            "date": event_date, "tag": tag, "category": categories,
+            "title": title_safe, "location": label,
             "reportedLocation": municipality, "locationAccuracy": accuracy,
-            "lat": lat, "lng": lng, "description": description,
+            "lat": lat, "lng": lng, "description": description, "body": body_text,
             "sourceUrl": permalink,
             "lastChecked": datetime.now(timezone.utc).isoformat(timespec="seconds")}
 
@@ -132,6 +141,13 @@ def normalize_municipality(text):
         return re.sub(r"\s+", "", match.group(0))
     match = re.search(r"(?:[一-龯ぁ-んァ-ヶ]+郡\s*)?[一-龯ぁ-んァ-ヶ]+(?:市|町|村)", text)
     return re.sub(r"\s+", "", match.group(0)) if match else ""
+
+
+def sanitize_public_body(text):
+    text = re.sub(r"\s+", " ", text or "").strip()
+    if any(term in text for term in APPEARANCE_TERMS):
+        return "不審な人物に関する情報です。詳しい状況は掲載元の記事をご確認ください。"
+    return text
 
 
 def geocode_area(municipality, session):
@@ -168,7 +184,7 @@ def save_outputs(csv_path, json_path, rows):
 
 def main():
     parser = argparse.ArgumentParser(description="パトネットあいちの不審者情報をCSVに蓄積し地図データに変換")
-    parser.add_argument("--months", type=int, default=1, help="取得する直近月数（1〜12）")
+    parser.add_argument("--months", type=int, default=12, help="取得する直近月数（1〜12、既定は12）")
     parser.add_argument("--csv", type=Path, default=Path("data/incidents.csv"))
     parser.add_argument("--json", type=Path, default=Path("data/incidents.json"))
     args = parser.parse_args()
@@ -187,24 +203,34 @@ def main():
     print(f"記事リンク候補: {len(reports)}件")
 
     rows = load_csv(args.csv)
+    # Sanitize older rows too when the public-summary policy changes.
+    for row in rows:
+        row["body"] = sanitize_public_body(row.get("body", ""))
     by_id = {row.get("id"): row for row in rows}
     existing_ids = set(by_id)
     added = 0
+    enriched = 0
     for permalink, posted_on in reports:
         identifier = hashlib.sha256(permalink.encode("utf-8")).hexdigest()[:20]
-        if identifier in existing_ids:
+        previous = by_id.get(identifier)
+        if previous and previous.get("body") and previous.get("category"):
             continue
         try:
             record = extract_article(permalink, posted_on, session)
             if record:
-                rows.append(record)
+                if previous:
+                    previous.update(record)
+                    enriched += 1
+                else:
+                    rows.append(record)
+                    by_id[record["id"]] = record
+                    added += 1
                 existing_ids.add(record["id"])
-                added += 1
             time.sleep(0.25)
         except (requests.RequestException, ValueError, KeyError, TypeError) as error:
             print(f"取得・ジオコード失敗: {permalink}: {error}")
     save_outputs(args.csv, args.json, rows)
-    print(f"CSV新規追加: {added}件 / 累計: {len(rows)}件")
+    print(f"CSV新規追加: {added}件 / 本文・カテゴリ補完: {enriched}件 / 累計: {len(rows)}件")
     print(f"出力: {args.csv} / {args.json}")
 
 
