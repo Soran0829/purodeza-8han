@@ -1,20 +1,25 @@
 name: Update safety map and deploy
 
 on:
-  schedule:
-    - cron: "17 21 * * *" # 06:17 JST every day
   workflow_dispatch:
+  schedule:
+    - cron: "17 21 * * *" # 06:17 JST
   push:
     branches: [main]
+    paths:
+      - ".github/workflows/update-and-deploy.yml"
+      - "scripts/**"
+      - "index (1).html"
+      - "README.md"
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -27,14 +32,25 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install dependencies
-        run: python -m pip install requests beautifulsoup4 pandas openpyxl
-      - name: Fetch source data
-        run: python scripts/update_data.py --months 7
-        env:
-          OUTPUT_DIR: site/data
+        run: python -m pip install requests beautifulsoup4
+      - name: Append new source data (only after reuse authorization)
+        if: ${{ vars.PATNET_REUSE_AUTHORIZED == 'true' }}
+        run: python scripts/update_data.py --fetch --months 1 --authorized
+      - name: Commit updated data ledger
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f data/incidents.csv data/incidents.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Update safety incident data"
+            git push
+          fi
       - name: Prepare site
         run: |
+          mkdir -p site/data
           cp 'index (1).html' site/index.html
+          cp data/incidents.csv site/data/incidents.csv
+          cp data/incidents.json site/data/incidents.json
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload Pages artifact

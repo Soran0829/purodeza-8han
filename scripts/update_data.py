@@ -1,208 +1,171 @@
-import json
-import re
+"""Fetch, normalize, and append Aichi safety reports.
+
+Automated collection and republication require source-owner authorization. Keep
+network fetching disabled unless the operator has obtained that authorization.
+"""
+
 import argparse
+import csv
+import hashlib
+import json
 import os
+import re
 import time
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
-import pandas as pd
 import requests
 from bs4 import BeautifulSoup
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
-parser = argparse.ArgumentParser(description="パトネットあいちの月別記事を取得します")
-parser.add_argument("--months", type=int, default=7, help="取得する直近の月数")
-args = parser.parse_args()
-
-if args.months < 1 or args.months > 120:
-    parser.error("--months は1から120の範囲で指定してください")
-
-today = date.today()
-years_months = []
-for offset in range(args.months):
-    month_index = today.year * 12 + today.month - 1 - offset
-    years_months.append((month_index // 12, f"{month_index % 12 + 1:02d}"))
-
-all_incidents = []
-print("=== パトネットあいち 構造不一致対策版ロボット起動 ===")
-
-area_coords = {
-    "名古屋": (35.1814, 136.9063),
-    "豊田": (35.0874, 137.1564),
-    "一宮": (35.3025, 136.8041),
-    "岡崎": (34.9532, 137.1685),
-    "豊橋": (34.7629, 137.3875),
-    "春日井": (35.2443, 136.9715),
+FIELDS = [
+    "id", "date", "tag", "location", "reportedLocation", "locationAccuracy",
+    "lat", "lng", "description", "sourceUrl", "lastChecked",
+]
+AREA_COORDS = {
+    "名古屋": (35.1814, 136.9063), "豊田": (35.0874, 137.1564),
+    "一宮": (35.3025, 136.8041), "岡崎": (34.9532, 137.1685),
+    "豊橋": (34.7629, 137.3875), "春日井": (35.2443, 136.9715),
 }
 
-geocode_cache = {}
-source_session = requests.Session()
-source_session.mount(
-    "http://",
-    HTTPAdapter(
-        max_retries=Retry(
-            total=3,
-            connect=3,
-            read=3,
-            backoff_factor=2,
-            status_forcelist=(429, 500, 502, 503, 504),
-            allowed_methods=("GET",),
-        )
-    ),
-)
 
-
-def find_reported_location(content):
-    """Return the location named after 発生場所, when the article has one."""
-    match = re.search(
-        r"発生場所\s*[:：]?\s*(.+?)(?=■|状況|\s{2,}|$)",
-        content,
+def parse_report(content, title=""):
+    """Extract only coarse, non-identifying fields from a source report."""
+    text = re.sub(r"\s+", " ", content).strip()
+    place = re.search(r"発生場所\s*[:：]?\s*(.+?)(?=■|状況|内容|$)", text)
+    location = re.sub(r"\s+", "", place.group(1)).strip("。、「」『』") if place else ""
+    area = next((name for name in AREA_COORDS if name in text or name in title), None)
+    # Avoid producing address-level public coordinates. The point denotes a broad area only.
+    if area:
+        lat, lng = AREA_COORDS[area]
+        place_label = f"愛知県{area}市付近（市の代表点）"
+        accuracy = "city"
+    else:
+        lat, lng = 35.1814, 136.9063
+        place_label = "愛知県内（場所を特定できず）"
+        accuracy = "prefecture"
+    tag = "つきまとい" if "つきまとい" in text else (
+        "のぞき・盗撮" if "盗撮" in text or "ちかん" in text else "声かけ事案"
     )
-    if not match:
-        return ""
-    return re.sub(r"\s+", "", match.group(1)).strip("。、「」『』")
+    # Omit descriptions that could identify a victim or suspect.
+    summary = f"{tag}に関する情報。詳細は出典を確認してください。"
+    return {"tag": tag, "location": place_label, "reportedLocation": location,
+            "locationAccuracy": accuracy, "lat": lat, "lng": lng, "description": summary}
 
 
-def geocode(location, city_name=None):
-    """Resolve an address with GSI's address search; return lon/lat or None."""
+def geocode(location, city_name=None, session=None):
+    """Optional GSI address lookup for authorized internal workflows only."""
     if not location:
         return None
-    cache_key = (city_name, location)
-    if cache_key in geocode_cache:
-        return geocode_cache[cache_key]
+    response = (session or requests).get(
+        "https://msearch.gsi.go.jp/address-search/AddressSearch",
+        params={"q": f"愛知県{city_name}市{location}" if city_name else f"愛知県{location}"},
+        timeout=10,
+    )
+    response.raise_for_status()
+    results = response.json()
+    if not results:
+        return None
+    lng, lat = results[0]["geometry"]["coordinates"]
+    return lat, lng
 
-    try:
-        response = requests.get(
-            "https://msearch.gsi.go.jp/address-search/AddressSearch",
-            params={
-                "q": f"愛知県{city_name}市{location}"
-                if city_name
-                else f"愛知県{location}"
-            },
-            timeout=10,
-        )
+
+def load_csv(path):
+    if not path.exists():
+        return []
+    with path.open(encoding="utf-8-sig", newline="") as file:
+        return list(csv.DictReader(file))
+
+
+def save_csv(path, rows):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8-sig", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=FIELDS, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def stable_id(source_url, content):
+    return hashlib.sha256(f"{source_url}\n{content}".encode("utf-8")).hexdigest()[:20]
+
+
+def fetch_reports(months):
+    """Collect monthly archive entries. Call only with permission enabled."""
+    today = date.today()
+    reports = []
+    for offset in range(months):
+        month_index = today.year * 12 + today.month - 1 - offset
+        year, month = month_index // 12, month_index % 12 + 1
+        url = f"http://patnet.jp/{year}/{month:02d}/"
+        response = requests.get(url, timeout=(10, 30))
         response.raise_for_status()
-        results = response.json()
-        if results:
-            lon, lat = results[0]["geometry"]["coordinates"]
-            result = (lat, lon)
-        else:
-            result = None
-    except (requests.RequestException, ValueError, KeyError, TypeError) as error:
-        print(f"住所検索に失敗: {location}: {error}")
-        result = None
-
-    geocode_cache[cache_key] = result
-    time.sleep(0.2)
-    return result
-
-for year, month in years_months:
-    # The source host currently presents a TLS certificate for a different
-    # hostname. Use its working HTTP endpoint rather than disabling TLS checks.
-    url = f"http://patnet.jp/{year}/{month}/"
-    print(f"【スキャン中】 {year}年{month}月...")
-
-    try:
-        time.sleep(0.5)
-        response = source_session.get(url, timeout=(10, 30))
         response.encoding = response.apparent_encoding
-
-        if response.status_code == 404:
-            continue
-        response.raise_for_status()
-
         soup = BeautifulSoup(response.text, "html.parser")
-
-        # 🔍 サイトのあらゆる構造に対応できるよう読み取り網を広げる
-        articles = soup.find_all(
-            ["article", "div", "li"],
-            class_=[
-                "post",
-                "entry",
-                "entry-content",
-                "content",
-                "post-item",
-                "type-post",
-            ],
-        )
-
-        # もし特定のクラス名で見つからない場合は、すべての段落や標準要素から探す
-        if not articles:
-            articles = soup.find_all("article")
-        if not articles:
-            articles = soup.find_all("div", id="main")
-
+        articles = soup.find_all("article") or soup.find_all("div", id="main")
         for article in articles:
-            title_el = article.find(["h1", "h2", "h3", "a"])
-            title = title_el.text.strip() if title_el else "不審者情報"
-            if len(title) > 30:
-                title = "防犯・不審者情報"
-
-            content = article.text.strip()
-            if len(content) < 20:  # 文字数が少なすぎる空要素はスキップ
+            content = article.get_text(" ", strip=True)
+            if len(content) < 20:
                 continue
+            heading = article.find(["h1", "h2", "h3", "a"])
+            title = heading.get_text(" ", strip=True) if heading else ""
+            reports.append((url, content, title, f"{year}年{month:02d}月"))
+        time.sleep(0.5)
+    return reports
 
-            reported_location = find_reported_location(content)
-            area_name = next(
-                (area for area in area_coords if area in content or area in title),
-                None,
-            )
-            coordinates = geocode(reported_location, area_name)
 
-            # If the article lacks a mappable incident address, use a city
-            # center as an explicitly coarse fallback. Never invent offsets.
-            if coordinates:
-                lat, lng = coordinates
-                location = f"愛知県{reported_location}"
-                location_accuracy = "address"
-            elif area_name:
-                lat, lng = area_coords[area_name]
-                location = f"愛知県{area_name}市付近（市の代表点）"
-                location_accuracy = "city"
-            else:
-                lat, lng = 35.1814, 136.9063
-                location = "愛知県内（場所を特定できず）"
-                location_accuracy = "prefecture"
+def parse_text_input(input_path):
+    """Read authorized reports from a UTF-8 text file, separated by blank lines."""
+    reports = []
+    if not input_path:
+        return reports
+    for block in re.split(r"\n\s*\n", input_path.read_text(encoding="utf-8-sig")):
+        block = block.strip()
+        if block:
+            reports.append(("", block, "", "発生時期未確認"))
+    return reports
 
-            tag = "声かけ事案"
-            if "つきまとい" in content:
-                tag = "つきまとい"
-            elif "盗撮" in content or "ちかん" in content:
-                tag = "のぞき・盗撮"
 
-            all_incidents.append(
-                {
-                    "id": len(all_incidents) + 1,
-                    "tag": tag,
-                    "archivePath": f"{year}/{month}",
-                    "date": f"{year}年{month}月 発生事案",
-                    "location": location,
-                    "reportedLocation": reported_location,
-                    "locationAccuracy": location_accuracy,
-                    "lat": lat,
-                    "lng": lng,
-                    "description": content[:140] + ("..." if len(content) > 140 else ""),
-                }
-            )
+def main():
+    parser = argparse.ArgumentParser(description="パトネットあいち情報をCSVに蓄積し、地図データを出力")
+    parser.add_argument("--input", type=Path, help="権限を得た情報を手動保存したUTF-8テキスト（1記事ずつ空行区切り）")
+    parser.add_argument("--fetch", action="store_true", help="許諾済みの月別アーカイブを取得")
+    parser.add_argument("--months", type=int, default=1)
+    parser.add_argument("--authorized", action="store_true", help="取得・保存・再掲載の許諾を得ていることを確認")
+    parser.add_argument("--csv", type=Path, default=Path(os.environ.get("OUTPUT_DIR", "data")) / "incidents.csv")
+    parser.add_argument("--json", type=Path, default=Path(os.environ.get("OUTPUT_DIR", "data")) / "incidents.json")
+    args = parser.parse_args()
+    if args.input and not args.authorized:
+        parser.error("手動入力データの保存・再掲載にも許諾が必要です。確認後に --authorized を指定してください")
+    if args.fetch and not args.authorized:
+        parser.error("自動取得には情報提供元から取得・保存・再掲載の許諾を得たうえで --authorized を指定してください")
+    if not args.fetch and not args.input:
+        parser.error("--input または（許諾済みの場合のみ）--fetch を指定してください")
+    if not 1 <= args.months <= 120:
+        parser.error("--months は1から120の範囲で指定してください")
 
-    except Exception as e:
-        print(f"アクセスエラー: {e}")
-        continue
+    reports = fetch_reports(args.months) if args.fetch else []
+    reports.extend(parse_text_input(args.input))
 
-if not all_incidents:
-    raise RuntimeError("取得件数が0件です。既存の公開データは更新しません。")
+    existing = load_csv(args.csv)
+    known = {row.get("id", "") for row in existing}
+    checked = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    added = 0
+    for source_url, content, title, report_date in reports:
+        identifier = stable_id(source_url, content)
+        if identifier in known:
+            continue
+        parsed = parse_report(content, title)
+        existing.append({"id": identifier, "date": report_date, **parsed,
+                         "sourceUrl": source_url, "lastChecked": checked})
+        known.add(identifier)
+        added += 1
+    save_csv(args.csv, existing)
+    args.json.parent.mkdir(parents=True, exist_ok=True)
+    # JSON remains the map's runtime format; CSV is the durable append-only ledger.
+    with args.json.open("w", encoding="utf-8") as file:
+        json.dump(existing, file, ensure_ascii=False, indent=2)
+    print(f"CSV: {args.csv}（新規 {added} 件 / 累計 {len(existing)} 件）")
+    print(f"地図データ: {args.json}")
 
-# データの書き出し
-df = pd.DataFrame(all_incidents)
-output_dir = Path(os.environ.get("OUTPUT_DIR", "data"))
-output_dir.mkdir(parents=True, exist_ok=True)
-df.to_excel(output_dir / "patnet_aichi_archive.xlsx", index=False, engine="openpyxl")
 
-with (output_dir / "incidents.json").open("w", encoding="utf-8") as f:
-    json.dump(all_incidents, f, ensure_ascii=False)
-
-print(
-    f"\n🎉 処理完了：合計 {len(all_incidents)} 件のデータを 『{output_dir / 'incidents.json'}』 に保存しました！"
-)
+if __name__ == "__main__":
+    main()

@@ -1,4 +1,5 @@
 /data/incidents.json
+/data/incidents.csv
 /data/patnet_aichi_archive.xlsx
 /site/
 /__pycache__/
