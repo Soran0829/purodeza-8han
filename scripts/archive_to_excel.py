@@ -50,6 +50,9 @@ def write_sheet(rows, path):
                     value = float(value)
                 except (TypeError, ValueError):
                     value = ""
+            elif isinstance(value, str):
+                # Normalize line endings so output is identical on Windows and Linux.
+                value = value.replace("\r\n", "\n").replace("\r", "\n")
             values.append(value)
         sheet.append(values)
         url_cell = sheet.cell(row=sheet.max_row, column=FIELDS.index("sourceUrl") + 1)
@@ -79,6 +82,9 @@ def save_deterministic(workbook, path):
         entries = [(item.filename, source.read(item.filename)) for item in source.infolist()]
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as target:
         for name, data in entries:
+            if name.endswith(".xml"):
+                # Platform-dependent XML serializers may emit CRLF; pin it to LF.
+                data = data.replace(b"\r\n", b"\n")
             if name == "docProps/core.xml":
                 # openpyxl stamps the current time on save; pin it for reproducible output.
                 data = re.sub(rb"(<dcterms:modified[^>]*>)[^<]*(</dcterms:modified>)",
