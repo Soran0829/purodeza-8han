@@ -91,6 +91,9 @@ def save_deterministic(workbook, path):
                               rb"\g<1>1980-01-01T00:00:00Z\g<2>", data)
             info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
+            # Pin platform-specific ZIP attributes so output matches on Windows and Linux.
+            info.create_system = 3
+            info.external_attr = 0
             target.writestr(info, data)
 
 
