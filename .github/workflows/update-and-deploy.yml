@@ -9,7 +9,7 @@ on:
     paths:
       - ".github/workflows/update-and-deploy.yml"
       - "scripts/**"
-      - "index (1).html"
+      - "index.html"
       - "README.md"
 
 permissions:
@@ -32,14 +32,16 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install dependencies
-        run: python -m pip install requests beautifulsoup4
+        run: python -m pip install requests beautifulsoup4 openpyxl
       - name: Fetch past-year suspicious-person reports, geocode, and update CSV/JSON
         run: python scripts/update_data.py --months 12
+      - name: Export Excel archive
+        run: python scripts/archive_to_excel.py
       - name: Commit updated data ledger
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f data/incidents.csv data/incidents.json
+          git add data/incidents.csv data/incidents.json data/patnet_aichi_archive.xlsx
           if ! git diff --cached --quiet; then
             git commit -m "Update safety incident data"
             git push
@@ -47,9 +49,10 @@ jobs:
       - name: Prepare site
         run: |
           mkdir -p site/data
-          cp 'index (1).html' site/index.html
+          cp index.html site/index.html
           cp data/incidents.csv site/data/incidents.csv
           cp data/incidents.json site/data/incidents.json
+          cp data/patnet_aichi_archive.xlsx site/data/patnet_aichi_archive.xlsx
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload Pages artifact
