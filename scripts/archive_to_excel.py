@@ -2,7 +2,11 @@
 
 import argparse
 import csv
+import io
 import json
+import re
+import zipfile
+from datetime import datetime
 from pathlib import Path
 
 from openpyxl import Workbook
@@ -62,7 +66,26 @@ def write_sheet(rows, path):
             elif cell.column_letter == "F":
                 cell.alignment = Alignment(vertical="top")
     path.parent.mkdir(parents=True, exist_ok=True)
-    workbook.save(path)
+    save_deterministic(workbook, path)
+
+
+def save_deterministic(workbook, path):
+    """Save with fixed metadata and ZIP timestamps for byte-identical repeat output."""
+    workbook.properties.created = datetime(1980, 1, 1)
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    buffer.seek(0)
+    with zipfile.ZipFile(buffer) as source:
+        entries = [(item.filename, source.read(item.filename)) for item in source.infolist()]
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as target:
+        for name, data in entries:
+            if name == "docProps/core.xml":
+                # openpyxl stamps the current time on save; pin it for reproducible output.
+                data = re.sub(rb"(<dcterms:modified[^>]*>)[^<]*(</dcterms:modified>)",
+                              rb"\g<1>1980-01-01T00:00:00Z\g<2>", data)
+            info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            target.writestr(info, data)
 
 
 def main():
