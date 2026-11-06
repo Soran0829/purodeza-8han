@@ -18,7 +18,7 @@
     .side{min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column;background:#fff;border-left:1px solid #e1e6ed}
     .sidehead{flex:none;padding:20px;border-bottom:1px solid #e8edf3}.sidehead h2{font-size:17px;margin:0 0 8px}.note{font-size:12px;line-height:1.65;color:#5b6678;margin:0}.note a{color:#1f6f8b}
     .items{min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding:12px;flex:1}
-    .item{background:#fff;border:1px solid #e5eaf0;border-radius:10px;padding:14px;margin-bottom:10px;cursor:pointer}.item:hover{border-color:#48aebe}.meta{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:#667085}.tag{color:#bb2947;font-weight:700}.place{font-weight:700;margin:8px 0}.article-title{font-size:13px;font-weight:700;margin:8px 0}.category{font-size:11px;color:#315c82;margin-bottom:6px}.desc{font-size:13px;line-height:1.5;color:#4b5563;max-height:88px;overflow-y:auto;overscroll-behavior:contain;white-space:pre-wrap;padding:8px;background:#f7f9fc;border-radius:6px}.item a{font-size:12px;display:inline-block;margin-top:8px}.empty{padding:20px;color:#667085;text-align:center;font-size:14px}.leaflet-popup-content{line-height:1.6}
+    .item{background:#fff;border:1px solid #e5eaf0;border-radius:10px;padding:14px;margin-bottom:10px;cursor:pointer}.item:hover{border-color:#48aebe}.item:focus-visible{outline:3px solid #48aebe;outline-offset:2px}.meta{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:#667085}.tag{color:#bb2947;font-weight:700}.place{font-weight:700;margin:8px 0}.article-title{font-size:13px;font-weight:700;margin:8px 0}.category{font-size:11px;color:#315c82;margin-bottom:6px}.desc{font-size:13px;line-height:1.5;color:#4b5563;max-height:88px;overflow-y:auto;overscroll-behavior:contain;white-space:pre-wrap;padding:8px;background:#f7f9fc;border-radius:6px}.item a{font-size:12px;display:inline-block;margin-top:8px}.empty{padding:20px;color:#667085;text-align:center;font-size:14px}.leaflet-popup-content{line-height:1.6}
     @media(max-width:800px){
       body{grid-template-rows:64px minmax(0,1fr)}
       header{padding:0 14px}h1{font-size:16px}header p{font-size:11px}.badge{font-size:11px;padding:6px 9px}
@@ -31,7 +31,7 @@
 </head>
 <body>
   <header><div><h1>AICHI SAFETY RADAR</h1><p>パトネットあいち 不審者情報マップ</p></div><div id="status" class="badge">データ読込中</div></header>
-  <main class="layout"><div id="map" aria-label="不審者情報の地図"></div><section class="side"><div class="sidehead"><h2>過去1年の不審者情報</h2><p class="note">ピンは住所を町・市区単位に丸めた代表位置です。公開情報であり、現在の危険や犯罪発生を示すものではありません。記事本文は「状況」を表示し、人物の外見等は省いています。 <a href="data/patnet_aichi_archive.xlsx" download>Excel版をダウンロード</a></p></div><div id="items" class="items"></div></section></main>
+  <main class="layout"><div id="map" aria-label="不審者情報の地図"></div><section class="side"><div class="sidehead"><h2>過去1年の不審者情報</h2><p class="note">ピンは住所を町・市区単位に丸めた代表位置です。公開情報であり、現在の危険や犯罪発生を示すものではありません。記事本文は「状況」を表示し、人物の外見等は省いています。 <a href="data/patnet_aichi_archive.xlsx" download>Excel版をダウンロード</a></p></div><noscript><p class="empty">地図と一覧の表示には JavaScript が必要です。データは <a href="data/patnet_aichi_archive.xlsx" download>Excel版</a> でも確認できます。</p></noscript><div id="items" class="items" aria-live="polite"></div></section></main>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script>
@@ -60,7 +60,10 @@
         const meta=document.createElement('div');meta.className='meta';const date=document.createElement('span');date.textContent=row.date||'';const tag=document.createElement('span');tag.className='tag';tag.textContent=row.tag||'不審者情報';meta.append(date,tag);
         const place=document.createElement('div');place.className='place';place.textContent=row.location||'愛知県内';const title=document.createElement('div');title.className='article-title';title.textContent=row.title||'';const category=document.createElement('div');category.className='category';category.textContent=`カテゴリ: ${row.category||'不審者情報'}`;const desc=document.createElement('div');desc.className='desc';desc.textContent=row.body||row.description||'';
         card.append(meta,place,title,category,desc);const link=document.createElement('a');link.href=row.sourceUrl||'https://patnet.jp/';link.target='_blank';link.rel='noopener noreferrer';link.textContent='掲載元の記事を開く ↗';card.append(link);
-        card.addEventListener('click',e=>{if(e.target!==link){markers.zoomToShowLayer(marker,()=>marker.openPopup());}});items.append(card);
+        const focusOnMap=()=>markers.zoomToShowLayer(marker,()=>marker.openPopup());
+        card.tabIndex=0;card.setAttribute('role','button');card.setAttribute('aria-label',`${row.date||''} ${row.location||''} の情報を地図で表示`);
+        card.addEventListener('click',e=>{if(e.target!==link)focusOnMap();});
+        card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();focusOnMap();}});items.append(card);
       });
       if(bounds.length)map.fitBounds(bounds,{padding:[28,28],maxZoom:11});
     }).catch(error=>{status.textContent='データを読み込めません';items.textContent=`データを読み込めませんでした: ${error.message}`;});

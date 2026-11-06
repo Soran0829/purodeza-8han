@@ -23,9 +23,13 @@ NUMERIC_FIELDS = {"lat", "lng"}
 
 def load_rows(path):
     if path.suffix.lower() == ".json":
-        return json.loads(path.read_text(encoding="utf-8"))
-    with path.open(encoding="utf-8-sig", newline="") as file:
-        return list(csv.DictReader(file))
+        rows = json.loads(path.read_text(encoding="utf-8"))
+    else:
+        with path.open(encoding="utf-8-sig", newline="") as file:
+            rows = list(csv.DictReader(file))
+    if not isinstance(rows, list):
+        raise ValueError(f"入力データは配列である必要があります: {path}")
+    return rows
 
 
 def write_sheet(rows, path):
@@ -59,6 +63,11 @@ def write_sheet(rows, path):
         if url_cell.value:
             url_cell.hyperlink = url_cell.value
             url_cell.style = "Hyperlink"
+        for column, value in enumerate(values, start=1):
+            # A scraped value starting with "=" would otherwise be stored as a
+            # spreadsheet formula. Force it back to plain text.
+            if isinstance(value, str) and value.startswith("="):
+                sheet.cell(row=sheet.max_row, column=column).data_type = "s"
 
     sheet.freeze_panes = "A2"
     sheet.auto_filter.ref = f"A1:{get_column_letter(len(FIELDS))}{sheet.max_row}"

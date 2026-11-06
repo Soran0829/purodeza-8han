@@ -12,6 +12,8 @@ from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 BASE_URL = "http://patnet.jp/"
 GEOCODER_URL = "https://msearch.gsi.go.jp/address-search/AddressSearch"
@@ -23,6 +25,16 @@ GEOCODE_CACHE = {}
 APPEARANCE_TERMS = ("着用", "身に着け", "眼鏡", "メガネ", "めがね", "サングラス", "目出し帽",
                     "帽子", "ヘルメット", "マスク", "髪型", "体格", "身長", "服装", "上着",
                     "長ズボン", "短パン", "ワンボックス", "車両", "ナンバー")
+
+
+def build_session():
+    """HTTP session that retries transient network and server failures."""
+    retry = Retry(total=3, backoff_factor=0.5, status_forcelist=(429, 500, 502, 503, 504),
+                  allowed_methods=("GET",), respect_retry_after_header=True)
+    session = requests.Session()
+    session.mount("http://", HTTPAdapter(max_retries=retry))
+    session.mount("https://", HTTPAdapter(max_retries=retry))
+    return session
 
 
 def month_start(months_back=0):
@@ -158,6 +170,7 @@ def geocode_area(municipality, session):
     results = response.json()
     if not results:
         GEOCODE_CACHE[municipality] = None
+        time.sleep(0.2)  # Stay polite even when the geocoder has no match.
         return None
     lng, lat = results[0]["geometry"]["coordinates"]
     GEOCODE_CACHE[municipality] = (float(lat), float(lng))
@@ -179,7 +192,9 @@ def save_outputs(csv_path, json_path, rows):
         writer.writeheader()
         writer.writerows(rows)
     json_path.parent.mkdir(parents=True, exist_ok=True)
-    json_path.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
+    # Pin LF so JSON output is byte-identical on Windows and Linux.
+    json_path.write_text(json.dumps(rows, ensure_ascii=False, indent=2) + "\n",
+                         encoding="utf-8", newline="\n")
 
 
 def main():
@@ -191,7 +206,7 @@ def main():
     if not 1 <= args.months <= 12:
         parser.error("--months は1から12の範囲で指定してください")
 
-    session = requests.Session()
+    session = build_session()
     cutoff = month_start(args.months - 1)
     reports = []
     for back in reversed(range(args.months)):
@@ -207,7 +222,6 @@ def main():
     for row in rows:
         row["body"] = sanitize_public_body(row.get("body", ""))
     by_id = {row.get("id"): row for row in rows}
-    existing_ids = set(by_id)
     added = 0
     enriched = 0
     for permalink, posted_on in reports:
@@ -225,7 +239,6 @@ def main():
                     rows.append(record)
                     by_id[record["id"]] = record
                     added += 1
-                existing_ids.add(record["id"])
             time.sleep(0.25)
         except (requests.RequestException, ValueError, KeyError, TypeError) as error:
             print(f"取得・ジオコード失敗: {permalink}: {error}")
