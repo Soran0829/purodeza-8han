@@ -15566,5 +15566,37 @@
     "body": "ポケットに手を突っ込んだ男に後ろから追いかけられた",
     "sourceUrl": "http://patnet.jp/2026/11/07/%e8%a5%bf%e5%b0%be%e5%b8%82-276/",
     "lastChecked": "2026-11-08T00:40:26+00:00"
+  },
+  {
+    "id": "5d8970a7071c4e0ea311",
+    "date": "11月9日(月)午後4時30分頃",
+    "tag": "声かけ・不審者情報",
+    "category": "不審者情報",
+    "title": "名古屋市昭和区",
+    "location": "名古屋市昭和区付近（地域代表点）",
+    "reportedLocation": "名古屋市昭和区",
+    "locationAccuracy": "municipality",
+    "lat": 35.150276,
+    "lng": 136.934174,
+    "description": "声かけ・不審者情報に関する情報です。",
+    "body": "男が、帰宅途中の女子生徒の後をつけた",
+    "sourceUrl": "http://patnet.jp/2026/11/09/%e5%90%8d%e5%8f%a4%e5%b1%8b%e5%b8%82%e6%98%ad%e5%92%8c%e5%8c%ba-203/",
+    "lastChecked": "2026-11-10T03:38:44+00:00"
+  },
+  {
+    "id": "561d1db55f1b8ba66c76",
+    "date": "11月9日(月)午後4時頃",
+    "tag": "声かけ・不審者情報",
+    "category": "不審者情報",
+    "title": "春日井市",
+    "location": "春日井市西本町付近（地域代表点）",
+    "reportedLocation": "春日井市西本町",
+    "locationAccuracy": "municipality",
+    "lat": 35.234455,
+    "lng": 136.935654,
+    "description": "声かけ・不審者情報に関する情報です。",
+    "body": "男が自転車に乗って帰宅中の児童のあとをつけた",
+    "sourceUrl": "http://patnet.jp/2026/11/09/%e6%98%a5%e6%97%a5%e4%ba%95%e5%b8%82-136/",
+    "lastChecked": "2026-11-10T03:38:45+00:00"
   }
 ]
