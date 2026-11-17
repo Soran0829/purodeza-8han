@@ -6,7 +6,6 @@
   <title>Aichi Safety Radar | パトネットあいち不審者情報マップ</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
   <style>
     *{box-sizing:border-box}
     html,body{width:100%;height:100%;min-height:0;margin:0}
@@ -18,20 +17,40 @@
     .side{min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column;background:#fff;border-left:1px solid #e1e6ed}
     .sidehead{flex:none;padding:20px;border-bottom:1px solid #e8edf3}.sidehead h2{font-size:17px;margin:0 0 8px}.note{font-size:12px;line-height:1.65;color:#5b6678;margin:0}.note a{color:#1f6f8b}
     .items{min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding:12px;flex:1}
-    .item{background:#fff;border:1px solid #e5eaf0;border-radius:10px;padding:14px;margin-bottom:10px;cursor:pointer}.item:hover{border-color:#48aebe}.item:focus-visible{outline:3px solid #48aebe;outline-offset:2px}.meta{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:#667085}.tag{color:#bb2947;font-weight:700}.place{font-weight:700;margin:8px 0}.article-title{font-size:13px;font-weight:700;margin:8px 0}.category{font-size:11px;color:#315c82;margin-bottom:6px}.desc{font-size:13px;line-height:1.5;color:#4b5563;max-height:88px;overflow-y:auto;overscroll-behavior:contain;white-space:pre-wrap;padding:8px;background:#f7f9fc;border-radius:6px}.item a{font-size:12px;display:inline-block;margin-top:8px}.empty{padding:20px;color:#667085;text-align:center;font-size:14px}.leaflet-popup-content{line-height:1.6}
+    .item{background:#fff;border:1px solid #e5eaf0;border-radius:10px;padding:14px;margin-bottom:10px;cursor:pointer}.item:hover{border-color:#48aebe}.item:focus-visible{outline:3px solid #48aebe;outline-offset:2px}.meta{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;font-size:11px;color:#667085}.place{font-weight:700;margin:8px 0}.article-title{font-size:13px;font-weight:700;margin:8px 0}.desc{font-size:13px;line-height:1.5;color:#4b5563;max-height:88px;overflow-y:auto;overscroll-behavior:contain;white-space:pre-wrap;padding:8px;background:#f7f9fc;border-radius:6px}.item a{font-size:12px;display:inline-block;margin-top:8px}.empty{padding:20px;color:#667085;text-align:center;font-size:14px}
+    .chip{--c:#64748b;flex:none;max-width:70%;font-size:11px;font-weight:700;color:var(--c);border:1px solid var(--c);border-radius:20px;padding:2px 9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .leaflet-popup-content{line-height:1.6}.leaflet-popup-content-wrapper{border-radius:12px}
+    .pop{min-width:220px}.pop .chip{display:inline-block;max-width:none;margin-bottom:6px}.pop-place{font-size:14px;margin:0 0 2px}.pop-date{font-size:11px;color:#667085;margin:0 0 6px}
+    .pop-body{font-size:12px;line-height:1.6;color:#4b5563;max-height:150px;overflow-y:auto;overscroll-behavior:contain;white-space:pre-wrap;background:#f7f9fc;border-radius:8px;padding:8px;margin:0 0 6px}
+    .pop a{font-size:12px}
+    /* カテゴリ別ピン */
+    .pin-wrap{background:none;border:none}
+    .pin{width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:var(--pin,#64748b);border:2px solid #fff;box-shadow:0 2px 6px rgba(23,32,51,.4);display:flex;align-items:center;justify-content:center}
+    .pin>span{transform:rotate(45deg);font-size:13px;line-height:1}
+    .cluster-wrap{background:none;border:none}
+    .cluster{width:34px;height:34px;border-radius:50%;background:rgba(16,26,51,.88);border:2px solid #fff;box-shadow:0 2px 6px rgba(23,32,51,.4);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+    /* 凡例・絞り込み */
+    .legend{position:absolute;left:10px;bottom:14px;z-index:1000;background:rgba(255,255,255,.97);border:1px solid #e1e6ed;border-radius:10px;padding:10px 12px;box-shadow:0 4px 14px rgba(23,32,51,.16);font-size:12px;max-height:min(62%,430px);overflow-y:auto;overscroll-behavior:contain}
+    .legend strong{display:block;margin:0 0 4px}
+    .legend label{display:flex;align-items:center;gap:6px;margin:3px 0;cursor:pointer;user-select:none;white-space:nowrap}
+    .legend input{accent-color:#101a33;margin:0}
+    .legend .dot{flex:none;width:11px;height:11px;border-radius:50%;background:var(--c);border:1px solid rgba(0,0,0,.18)}
+    .legend .n{color:#667085;font-variant-numeric:tabular-nums}
+    .legend .off{opacity:.45}
     @media(max-width:800px){
       body{grid-template-rows:64px minmax(0,1fr)}
       header{padding:0 14px}h1{font-size:16px}header p{font-size:11px}.badge{font-size:11px;padding:6px 9px}
       .layout{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(180px,48%) minmax(0,1fr)}
       .side{border-left:0;border-top:1px solid #e1e6ed}.sidehead{padding:10px 14px}.sidehead h2{font-size:15px;margin-bottom:4px}.note{font-size:11px;line-height:1.45}
       .items{padding:8px}.item{padding:11px;margin-bottom:8px}
+      .legend{max-height:42%;font-size:11px;padding:8px 10px}
     }
     @media(max-width:380px){header{gap:6px;padding:0 10px}h1{font-size:14px}.badge{font-size:10px;padding:5px 7px}.note{font-size:10px}}
   </style>
 </head>
 <body>
   <header><div><h1>AICHI SAFETY RADAR</h1><p>パトネットあいち 不審者情報マップ</p></div><div id="status" class="badge">データ読込中</div></header>
-  <main class="layout"><div id="map" aria-label="不審者情報の地図"></div><section class="side"><div class="sidehead"><h2>過去1年の不審者情報</h2><p class="note">ピンは住所を町・市区単位に丸めた代表位置です。公開情報であり、現在の危険や犯罪発生を示すものではありません。記事本文は「状況」を表示し、人物の外見等は省いています。 <a href="data/patnet_aichi_archive.xlsx" download>Excel版をダウンロード</a></p></div><noscript><p class="empty">地図と一覧の表示には JavaScript が必要です。データは <a href="data/patnet_aichi_archive.xlsx" download>Excel版</a> でも確認できます。</p></noscript><div id="items" class="items" aria-live="polite"></div></section></main>
+  <main class="layout"><div id="map" aria-label="不審者情報の地図"></div><section class="side"><div class="sidehead"><h2>過去1年の不審者情報</h2><p class="note">ピンの色とアイコンは行為の種別を示します。左下の凡例で表示するカテゴリを絞り込めます。ピンは住所を町・市区単位に丸めた代表位置です。公開情報であり、現在の危険や犯罪発生を示すものではありません。記事本文は「状況」を表示し、人物の外見等は省いています。 <a href="data/patnet_aichi_archive.xlsx" download>Excel版をダウンロード</a></p></div><noscript><p class="empty">地図と一覧の表示には JavaScript が必要です。データは <a href="data/patnet_aichi_archive.xlsx" download>Excel版</a> でも確認できます。</p></noscript><div id="items" class="items" aria-live="polite"></div></section></main>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script>
@@ -41,12 +60,45 @@
     resizeObserver.observe(mapElement);
     window.addEventListener('orientationchange',()=>setTimeout(()=>map.invalidateSize({pan:false}),250));
     L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',{maxZoom:18,attribution:'<a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>'}).addTo(map);
-    const markers=L.markerClusterGroup({maxClusterRadius:45,showCoverageOnHover:false,spiderfyOnMaxZoom:true,disableClusteringAtZoom:13}).addTo(map);
     const items=document.getElementById('items'),status=document.getElementById('status');
+
+    // カテゴリ定義（scripts/update_data.py の分類ラベルと対応）
+    const CATEGORIES=[
+      {label:'露出',color:'#d92b45',icon:'🚫'},
+      {label:'のぞき・盗撮',color:'#7c3aed',icon:'📷'},
+      {label:'接触・危害',color:'#ea580c',icon:'⚠️'},
+      {label:'つきまとい・追尾',color:'#1d4ed8',icon:'👣'},
+      {label:'侵入・住居への不審',color:'#78350f',icon:'🚪'},
+      {label:'なりすまし・訪問',color:'#db2777',icon:'🎭'},
+      {label:'声かけ',color:'#0d9488',icon:'💬'},
+      {label:'その他',color:'#64748b',icon:'📍'},
+    ];
+    const fallbackCategory=CATEGORIES[CATEGORIES.length-1];
+    const categoryOf=row=>{
+      const tag=row.tag||'';
+      return CATEGORIES.find(c=>tag===c.label||c.label.startsWith(tag)||tag.startsWith(c.label))||fallbackCategory;
+    };
+    const pinIcon=cat=>L.divIcon({
+      className:'pin-wrap',
+      html:`<span class="pin" style="--pin:${cat.color}"><span>${cat.icon}</span></span>`,
+      iconSize:[30,30],iconAnchor:[15,36],popupAnchor:[0,-34]
+    });
+    const cluster=L.markerClusterGroup({
+      showCoverageOnHover:false,maxClusterRadius:46,spiderfyOnMaxZoom:true,
+      iconCreateFunction:group=>L.divIcon({className:'cluster-wrap',html:`<span class="cluster">${group.getChildCount()}</span>`,iconSize:[34,34]})
+    }).addTo(map);
+
+    const markers=[];const countsByLabel={};CATEGORIES.forEach(c=>countsByLabel[c.label]=0);
+    const enabled=new Set(CATEGORIES.map(c=>c.label));
+    const applyFilter=()=>{
+      const visible=markers.filter(m=>enabled.has(m.categoryLabel));
+      cluster.clearLayers();cluster.addLayers(visible);
+      status.textContent=visible.length===markers.length?`掲載 ${markers.length} 件`:`表示 ${visible.length} / ${markers.length} 件`;
+    };
+
     fetch(`data/incidents.json?ts=${Date.now()}`,{cache:'no-store'}).then(r=>{if(!r.ok)throw Error(`HTTP ${r.status}`);return r.json()}).then(rows=>{
       if(!Array.isArray(rows))throw Error('JSON形式が正しくありません');
-      status.textContent=`掲載 ${rows.length} 件`;
-      if(!rows.length){items.innerHTML='<p class="empty">現在表示できるデータがありません。</p>';return;}
+      if(!rows.length){status.textContent='掲載 0 件';items.innerHTML='<p class="empty">現在表示できるデータがありません。</p>';return;}
       const bounds=[];
       rows.slice().sort((a,b)=>{
         const stamp=value=>{const match=(value||'').match(/\/(\d{4})\/(\d{2})\/(\d{2})\//);return match?`${match[1]}${match[2]}${match[3]}`:'00000000';};
@@ -54,19 +106,59 @@
       }).forEach(row=>{
         const lat=Number(row.lat),lng=Number(row.lng);if(!Number.isFinite(lat)||!Number.isFinite(lng))return;
         const point=[lat,lng];bounds.push(point);
-        const popup=document.createElement('div');
-        const strong=document.createElement('strong');strong.textContent=row.tag||'不審者情報';popup.append(strong,document.createElement('br'),document.createTextNode(`${row.date||''} ${row.location||''}`));
-        const marker=L.marker(point).bindPopup(popup);markers.addLayer(marker);const card=document.createElement('article');card.className='item';
-        const meta=document.createElement('div');meta.className='meta';const date=document.createElement('span');date.textContent=row.date||'';const tag=document.createElement('span');tag.className='tag';tag.textContent=row.tag||'不審者情報';meta.append(date,tag);
-        const place=document.createElement('div');place.className='place';place.textContent=row.location||'愛知県内';const title=document.createElement('div');title.className='article-title';title.textContent=row.title||'';const category=document.createElement('div');category.className='category';category.textContent=`カテゴリ: ${row.category||'不審者情報'}`;const desc=document.createElement('div');desc.className='desc';desc.textContent=row.body||row.description||'';
-        card.append(meta,place,title,category,desc);const link=document.createElement('a');link.href=row.sourceUrl||'https://patnet.jp/';link.target='_blank';link.rel='noopener noreferrer';link.textContent='掲載元の記事を開く ↗';card.append(link);
-        const focusOnMap=()=>markers.zoomToShowLayer(marker,()=>marker.openPopup());
+        const cat=categoryOf(row);countsByLabel[cat.label]=(countsByLabel[cat.label]||0)+1;
+        const popup=document.createElement('div');popup.className='pop';
+        const chip=document.createElement('span');chip.className='chip';chip.style.setProperty('--c',cat.color);chip.textContent=`${cat.icon} ${cat.label}`;
+        const place=document.createElement('p');place.className='pop-place';place.textContent=row.location||'愛知県内';
+        const when=document.createElement('p');when.className='pop-date';when.textContent=row.date||'';
+        const body=document.createElement('div');body.className='pop-body';body.textContent=row.body||row.description||'';
+        const link=document.createElement('a');link.href=row.sourceUrl||'https://patnet.jp/';link.target='_blank';link.rel='noopener noreferrer';link.textContent='掲載元の記事を開く ↗';
+        popup.append(chip,place,when,body,link);
+        const marker=L.marker(point,{icon:pinIcon(cat),title:`${cat.label}｜${row.location||'愛知県内'}`}).bindPopup(popup);
+        marker.categoryLabel=cat.label;markers.push(marker);
+        const card=document.createElement('article');card.className='item';
+        const meta=document.createElement('div');meta.className='meta';
+        const date=document.createElement('span');date.textContent=row.date||'';
+        const cardChip=chip.cloneNode(true);meta.append(date,cardChip);
+        const cardPlace=document.createElement('div');cardPlace.className='place';cardPlace.textContent=row.location||'愛知県内';
+        const title=document.createElement('div');title.className='article-title';title.textContent=row.title||'';
+        const desc=document.createElement('div');desc.className='desc';desc.textContent=row.body||row.description||'';
+        card.append(meta,cardPlace,title,desc);
+        const cardLink=link.cloneNode(true);card.append(cardLink);
+        const focusOnMap=()=>{
+          if(cluster.hasLayer(marker))cluster.zoomToShowLayer(marker,()=>marker.openPopup());
+          else map.setView(point,12);
+        };
         card.tabIndex=0;card.setAttribute('role','button');card.setAttribute('aria-label',`${row.date||''} ${row.location||''} の情報を地図で表示`);
-        card.addEventListener('click',e=>{if(e.target!==link)focusOnMap();});
-        card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();focusOnMap();}});items.append(card);
+        card.addEventListener('click',e=>{if(e.target===cardLink)return;focusOnMap();});
+        card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();focusOnMap();}});
+        items.append(card);
       });
+      cluster.addLayers(markers);
       if(bounds.length)map.fitBounds(bounds,{padding:[28,28],maxZoom:11});
+      buildLegend();
+      status.textContent=`掲載 ${markers.length} 件`;
     }).catch(error=>{status.textContent='データを読み込めません';items.textContent=`データを読み込めませんでした: ${error.message}`;});
+
+    function buildLegend(){
+      const legend=document.createElement('div');legend.className='legend';legend.setAttribute('aria-label','カテゴリで絞り込み');
+      const caption=document.createElement('strong');caption.textContent='カテゴリで絞り込み';legend.append(caption);
+      CATEGORIES.forEach(cat=>{
+        const row=document.createElement('label');
+        const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.checked=true;
+        checkbox.addEventListener('change',()=>{
+          checkbox.checked?enabled.add(cat.label):enabled.delete(cat.label);
+          row.classList.toggle('off',!checkbox.checked);
+          applyFilter();
+        });
+        const dot=document.createElement('span');dot.className='dot';dot.style.setProperty('--c',cat.color);
+        const text=document.createElement('span');text.textContent=`${cat.icon} ${cat.label}`;
+        const count=document.createElement('span');count.className='n';count.textContent=` ${countsByLabel[cat.label]||0}`;
+        row.append(checkbox,dot,text,count);
+        legend.append(row);
+      });
+      mapElement.append(legend);
+    }
   </script>
 </body>
 </html>

@@ -25,6 +25,33 @@ GEOCODE_CACHE = {}
 APPEARANCE_TERMS = ("着用", "身に着け", "眼鏡", "メガネ", "めがね", "サングラス", "目出し帽",
                     "帽子", "ヘルメット", "マスク", "髪型", "体格", "身長", "服装", "上着",
                     "長ズボン", "短パン", "ワンボックス", "車両", "ナンバー")
+# 行為の内容による分類。地図のピンの色と凡例はこのラベルに対応する。
+CATEGORY_RULES = [
+    ("露出", ("露出", "下半身", "全裸", "裸", "下着姿", "陰部", "臀部", "お尻を出", "尻を見せ",
+             "チャック", "ズボンを下げ", "ズボンを下ろ", "パンツ", "服を脱", "用を足", "小便", "前を開け")),
+    ("のぞき・盗撮", ("盗撮", "のぞき", "のぞい", "のぞか", "覗き", "覗い", "窓を開", "撮影",
+                    "カメラを向", "カメラを構", "スマホを向", "スマートフォンを向", "携帯電話を向",
+                    "電話を向", "電話機を向", "デジカメ", "シャッター", "写真を撮", "動画を撮", "レンズ")),
+    ("接触・危害", ("触", "抱きつ", "叩", "たたい", "殴", "蹴", "噛", "掴", "引っ張", "引っ掻",
+                  "引搣", "ぶつか", "体当たり", "めくっ", "なで", "液体", "花火", "投げつけ",
+                  "霧吹き", "水をかけ", "刃物", "ナイフ", "バット", "トンカチ", "鎌", "ハサミ",
+                  "バール", "凶器")),
+    ("つきまとい・追尾", ("つきまと", "をつけ", "をつい", "ついてき", "ついて行", "ついてい",
+                       "追いかけ", "追い回", "追い抜", "追い越", "追われ", "追随", "並走",
+                       "待ち伏せ", "見つめ", "ジロジロ", "じっと見", "ジッと見", "立ちふさが")),
+    ("侵入・住居への不審", ("侵入", "敷地内", "勝手に上がり", "勝手に入り", "玄関ドアを開け",
+                         "玄関扉を開け", "扉を開けよう", "庭に入", "インターホンを鳴ら",
+                         "インターフォンを押", "ベランダ")),
+    ("なりすまし・訪問", ("かたる", "訪問", "売りつけ", "販売", "勧誘", "斡旋", "点検", "工事",
+                       "募金", "寄付", "名刺", "セールス")),
+    ("声かけ", ("声をかけ", "声を掛け", "声かけ", "声掛け", "話しかけ", "話掛け", "尋ね", "問いかけ",
+              "聞いてき", "「", "」", "飴", "お菓子", "差し出し", "呼び止め", "手招き",
+              "卑猥な言葉", "卑猥な発言", "卑わいな", "暴言", "怒鳴", "わめ", "叫び", "雑誌")),
+]
+OTHER_LABEL = "その他"
+CATEGORY_LABELS = tuple(label for label, _ in CATEGORY_RULES) + (OTHER_LABEL,)
+# 旧タグ体系（本文から概略だけ残した過去データ向けのフォールバック）
+LEGACY_TAG_MAP = {"つきまとい": "つきまとい・追尾", "のぞき・盗撮": "のぞき・盗撮"}
 
 
 def build_session():
@@ -116,17 +143,12 @@ def extract_article(permalink, posted_on, session):
         return None
     event_match = re.search(r"■\s*発生日時\s*[:：]?\s*(.+?)(?=\s*■|$)", content, re.S)
     event_date = event_match.group(1).strip() if event_match else (posted_on.isoformat() if posted_on else "")
-    # Public summary deliberately excludes identifying descriptions from the report.
-    if "つきまとい" in content:
-        tag = "つきまとい"
-    elif "盗撮" in content or "ちかん" in content:
-        tag = "のぞき・盗撮"
-    else:
-        tag = "声かけ・不審者情報"
     title_safe = re.sub(r"[☆★■◆◇●◎【】\[\]]", "", title).strip()
     situation_match = re.search(r"■\s*状況\s*[:：]?\s*(.+?)(?=\s*■\s*(?:不審者等?|対策|情報配信|備考)|$)", content, re.S)
-    body_text = situation_match.group(1) if situation_match else title_safe
-    body_text = sanitize_public_body(body_text)
+    situation = situation_match.group(1) if situation_match else title_safe
+    # Classify from the raw situation text before the public summary replaces it.
+    tag = classify_report(f"{title_safe} {situation}")
+    body_text = sanitize_public_body(situation)
     description = f"{tag}に関する情報です。"
     latlng = geocode_area(municipality, session)
     if latlng:
@@ -143,6 +165,23 @@ def extract_article(permalink, posted_on, session):
             "lat": lat, "lng": lng, "description": description, "body": body_text,
             "sourceUrl": permalink,
             "lastChecked": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+
+
+def classify_report(text):
+    """Classify a report into a behaviour category from its situation text."""
+    for label, terms in CATEGORY_RULES:
+        if any(term in text for term in terms):
+            return label
+    return OTHER_LABEL
+
+
+def retag_row(row):
+    """Re-derive the category label from stored text (legacy data migration)."""
+    label = classify_report(f"{row.get('title', '')} {row.get('body', '')}")
+    if label == OTHER_LABEL:
+        label = LEGACY_TAG_MAP.get(row.get("tag", ""), OTHER_LABEL)
+    row["tag"] = label
+    row["description"] = f"{label}に関する情報です。"
 
 
 def normalize_municipality(text):
@@ -221,6 +260,10 @@ def main():
     # Sanitize older rows too when the public-summary policy changes.
     for row in rows:
         row["body"] = sanitize_public_body(row.get("body", ""))
+    # Migrate legacy coarse tags once; rows already carrying a category label are kept as-is.
+    for row in rows:
+        if row.get("tag") not in CATEGORY_LABELS:
+            retag_row(row)
     by_id = {row.get("id"): row for row in rows}
     added = 0
     enriched = 0

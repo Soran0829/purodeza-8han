@@ -69,13 +69,48 @@ class ExtractArticleTest(unittest.TestCase):
         self.assertEqual(record["reportedLocation"], "名古屋市昭和区")
         self.assertEqual(record["locationAccuracy"], "municipality")
         self.assertIn("不審者情報", record["category"])
-        self.assertEqual(record["tag"], "声かけ・不審者情報")
+        self.assertEqual(record["tag"], "声かけ")
+        self.assertEqual(record["description"], "声かけに関する情報です。")
         self.assertEqual(record["body"], "男が声をかけてきた")
         self.assertEqual(len(record["id"]), 20)
 
     def test_skips_articles_without_suspicious_person_category(self):
         html = ARTICLE_HTML.replace("カテゴリー: 不審者情報 , 身近な犯罪情報", "カテゴリー: 防犯情報")
         self.assertIsNone(self._extract(html))
+
+
+class ClassifyReportTest(unittest.TestCase):
+    def test_exposure_is_detected(self):
+        self.assertEqual(update_data.classify_report("男が児童の目の前で下半身を露出した"), "露出")
+
+    def test_voyeurism_is_detected(self):
+        self.assertEqual(update_data.classify_report("男が帰宅中の女子生徒にスマートフォンを向けた"), "のぞき・盗撮")
+
+    def test_contact_is_detected(self):
+        self.assertEqual(update_data.classify_report("男が歩行中の女性の体を触った"), "接触・危害")
+
+    def test_following_is_detected(self):
+        self.assertEqual(update_data.classify_report("男が下校中の児童の後をつけてきた"), "つきまとい・追尾")
+
+    def test_intrusion_is_detected(self):
+        self.assertEqual(update_data.classify_report("不審者が自宅敷地内に侵入した"), "侵入・住居への不審")
+
+    def test_call_out_is_detected(self):
+        self.assertEqual(update_data.classify_report("男が児童に「いくつなの」と声を掛けた"), "声かけ")
+
+    def test_generic_report_falls_back_to_other(self):
+        self.assertEqual(update_data.classify_report("近所で不審者が目撃された"), "その他")
+
+    def test_retag_row_updates_tag_and_description(self):
+        row = {"title": "春日井市", "body": "男が下半身を露出した", "tag": "声かけ・不審者情報"}
+        update_data.retag_row(row)
+        self.assertEqual(row["tag"], "露出")
+        self.assertEqual(row["description"], "露出に関する情報です。")
+
+    def test_retag_row_keeps_legacy_specific_tag_when_body_is_sanitized(self):
+        row = {"title": "春日井市", "body": "不審な人物に関する情報です。詳しい状況は掲載元の記事をご確認ください。", "tag": "つきまとい"}
+        update_data.retag_row(row)
+        self.assertEqual(row["tag"], "つきまとい・追尾")
 
 
 class BuildSessionTest(unittest.TestCase):
