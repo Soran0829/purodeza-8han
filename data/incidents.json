@@ -16142,5 +16142,37 @@
     "body": "男が下校中の男子児童のあとをつけた",
     "sourceUrl": "http://patnet.jp/2026/11/19/%e5%b2%a1%e5%b4%8e%e5%b8%82-210/",
     "lastChecked": "2026-11-21T02:19:05+00:00"
+  },
+  {
+    "id": "c9648580c86e876d79bc",
+    "date": "11月22日(日)午後6時30分頃",
+    "tag": "露出",
+    "category": "不審者情報 , 身近な犯罪情報",
+    "title": "安城市",
+    "location": "安城市朝日町付近（地域代表点）",
+    "reportedLocation": "安城市朝日町",
+    "locationAccuracy": "municipality",
+    "lat": 34.956936,
+    "lng": 137.089752,
+    "description": "露出に関する情報です。",
+    "body": "不審な人物に関する情報です。詳しい状況は掲載元の記事をご確認ください。",
+    "sourceUrl": "http://patnet.jp/2026/11/22/%e5%ae%89%e5%9f%8e%e5%b8%82-205/",
+    "lastChecked": "2026-11-23T01:48:26+00:00"
+  },
+  {
+    "id": "3229a7dd75c2152e8f63",
+    "date": "11月22日(日)午前10時50分頃",
+    "tag": "声かけ",
+    "category": "不審者情報",
+    "title": "安城市",
+    "location": "安城市桜町付近（地域代表点）",
+    "reportedLocation": "安城市桜町",
+    "locationAccuracy": "municipality",
+    "lat": 34.960857,
+    "lng": 137.078796,
+    "description": "声かけに関する情報です。",
+    "body": "自転車に乗った外国人の様な男2人組が、男子児童に対して、手招きしながら「こっち、こっち」と声をかけた",
+    "sourceUrl": "http://patnet.jp/2026/11/22/%e5%ae%89%e5%9f%8e%e5%b8%82-206/",
+    "lastChecked": "2026-11-23T01:48:27+00:00"
   }
 ]
